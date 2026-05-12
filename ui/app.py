@@ -100,6 +100,7 @@ class JosephApp(ctk.CTk):
 
         # Automation router (initialized lazily)
         self._router: Optional[object] = None
+        self._tool_dispatcher: Optional[object] = None
 
         # Phase 4 agents
         self._memory_agent: Optional[object] = None
@@ -112,6 +113,30 @@ class JosephApp(ctk.CTk):
         self._scheduler = None
         self._briefing = None
         self._context_awareness = None
+
+        # Phase 7 services
+        self._vision = None
+        self._file_manager = None
+        self._advanced_personality = None
+        self._autonomous_agent = None
+
+        # Phase 8 services
+        self._google = None
+        self._hotkey_daemon = None
+        self._api_server_thread = None
+
+        # Phase 9 services
+        self._notifications = None
+        self._system_tray = None
+        self._proactive_engine = None
+        self._multi_model_router = None
+        self._plugin_system = None
+        self._conversation_search = None
+
+        # Phase 10 services
+        self._clipboard_monitor = None
+        self._custom_commands = None
+        self._personality_learning = None
 
         # Configure customtkinter
         ctk.set_appearance_mode("dark")
@@ -840,6 +865,15 @@ class JosephApp(ctk.CTk):
         Background thread: planner decides routing, then executes.
         """
         try:
+            # Check custom commands first
+            if self._custom_commands:
+                cmd_key = self._custom_commands.match(user_text)
+                if cmd_key and self._router:
+                    result = self._custom_commands.execute(cmd_key, self._router)
+                    if result:
+                        self._response_queue.put(("automation_done", result))
+                        return
+
             # Check if multi-step task
             if (self._planner and self._task_agent and
                     self._planner.should_use_task_agent(user_text)):
@@ -868,26 +902,58 @@ class JosephApp(ctk.CTk):
             from brain.prompts import get_system_prompt
 
             memory_context = self.memory.get_context_for_llm(query=user_text)
-            # Add companion context
             companion_ctx = self.memory.get_companion_context()
             if companion_ctx:
                 memory_context = companion_ctx + "\n\n" + memory_context
+
+            # Phase 7 — advanced personality modifier
+            personality_modifier = ""
+            if self._advanced_personality:
+                self._advanced_personality.update(user_text)
+                personality_modifier = self._advanced_personality.get_system_modifier()
 
             system_prompt = get_system_prompt(
                 user_name=settings.USER_NAME,
                 memory_context=memory_context,
             )
+            if personality_modifier:
+                system_prompt += f"\n\nCurrent context: {personality_modifier}"
+
+            # Add personality learning style
+            if self._personality_learning:
+                style = self._personality_learning.get_style_modifier()
+                if style:
+                    system_prompt += f"\n\nLearned preferences: {style}"
             messages = self.memory.get_conversation_history()
 
             full_response = ""
-            for chunk in self.llm.chat_stream(
-                messages=messages,
-                system_prompt=system_prompt,
-            ):
+            # Use multi-model router if available, otherwise standard LLM
+            if self._multi_model_router and self._multi_model_router._active_fast:
+                stream_source = self._multi_model_router.chat_stream(
+                    messages=messages,
+                    user_input=user_text,
+                    system_prompt=system_prompt,
+                )
+            else:
+                stream_source = self.llm.chat_stream(
+                    messages=messages,
+                    system_prompt=system_prompt,
+                )
+
+            for chunk in stream_source:
                 self._response_queue.put(("chunk", chunk))
                 full_response += chunk
 
             self._response_queue.put(("done", None))
+
+            # Record interaction for personality learning
+            if self._personality_learning and full_response:
+                try:
+                    self._personality_learning.record_interaction(
+                        user_text, full_response
+                    )
+                except Exception:
+                    pass
 
             # Run memory agent in background
             if self._memory_agent and full_response:
@@ -903,23 +969,59 @@ class JosephApp(ctk.CTk):
             self._response_queue.put(("error", str(e)))
 
     def _try_automation(self, user_text: str) -> Optional[str]:
-        """Try to handle user_text as an automation command."""
+        """
+        Try to handle user_text as an automation command.
+        Uses LLM-powered tool dispatcher first, falls back to regex router.
+        """
         try:
             from automation.command_router import CommandRouter
+            from brain.tools import ToolDispatcher
 
+            # Initialize router
             if self._router is None:
                 self._router = CommandRouter(llm=self.llm)
             else:
                 self._router.set_llm(self.llm)
 
-            # Always attach latest Phase 5 services
-            self._router.attach_services(
+            # Initialize tool dispatcher (smarter, LLM-powered)
+            if self._tool_dispatcher is None:
+                self._tool_dispatcher = ToolDispatcher(llm=self.llm)
+                self._tool_dispatcher.attach_browser(
+                    self._router.browser,
+                    self._router._loop,
+                )
+                from automation.desktop.app_control import AppController
+                self._tool_dispatcher.app_ctrl = AppController()
+
+            # Attach Phase 5 services to both
+            services = dict(
                 weather=self._weather,
                 notes=self._notes,
                 scheduler=self._scheduler,
                 briefing=self._briefing,
             )
+            self._router.attach_services(**services)
+            self._tool_dispatcher.attach_services(**services)
+            self._tool_dispatcher.attach_llm(self.llm)
 
+            # Attach Phase 7 services
+            if self._vision:
+                self._tool_dispatcher.vision = self._vision
+            if self._file_manager:
+                self._tool_dispatcher.file_manager = self._file_manager
+            if self._autonomous_agent:
+                self._tool_dispatcher.autonomous_agent = self._autonomous_agent
+                self._autonomous_agent.tool_dispatcher = self._tool_dispatcher
+            # Phase 8 — Google
+            if hasattr(self, "_google") and self._google:
+                self._tool_dispatcher.google = self._google
+
+            # Try LLM tool dispatcher first
+            response, was_automated = self._tool_dispatcher.dispatch(user_text)
+            if was_automated and response:
+                return response
+
+            # Fall back to regex router for speed on obvious commands
             response, was_automated = self._router.handle_sync(user_text)
             if was_automated and response:
                 return response
@@ -1200,24 +1302,26 @@ class JosephApp(ctk.CTk):
         threading.Thread(target=self._load_phase5_services, daemon=True).start()
 
     def _load_phase5_services(self) -> None:
-        """Load all Phase 5 services (runs on background thread)."""
+        """Load all Phase 5+ services (runs on background thread)."""
         try:
             from brain.weather import WeatherService
             from brain.notes import NotesManager
             from brain.briefing import BriefingSystem
             from brain.context_awareness import ContextAwareness
+            from brain.google_integration import GoogleIntegration
+            from brain.hotkey_daemon import HotkeyDaemon
             from scheduler.scheduler_manager import SchedulerManager
 
             self._weather = WeatherService()
             self._notes = NotesManager()
             self._context_awareness = ContextAwareness()
             self._context_awareness.start()
+            self._google = GoogleIntegration()
 
             # Scheduler with TTS callback
             def speak_reminder(msg: str):
                 if self._voice and self._voice_enabled:
                     self._voice.tts.speak(msg, interrupt=True)
-                # Also show in chat
                 self.after(0, lambda: self._add_system_message(
                     f"Reminder: {msg}", COLORS["warning"]
                 ))
@@ -1225,13 +1329,23 @@ class JosephApp(ctk.CTk):
             self._scheduler = SchedulerManager(on_reminder=speak_reminder)
             self._scheduler.start()
 
-            # Briefing system
+            # Briefing system — include Google calendar if available
             self._briefing = BriefingSystem(
                 weather_service=self._weather,
                 notes_manager=self._notes,
                 scheduler=self._scheduler,
                 memory_manager=self.memory,
                 tts=self._voice.tts if self._voice else None,
+            )
+
+            # Hotkey daemon
+            self._hotkey_daemon = HotkeyDaemon()
+            self._hotkey_daemon.start(
+                on_activate=self._hotkey_activate,
+                on_screenshot=self._hotkey_screenshot,
+                on_clipboard=self._hotkey_clipboard,
+                on_briefing=self._hotkey_briefing,
+                on_note=self._hotkey_note,
             )
 
             # Attach services to router
@@ -1243,14 +1357,174 @@ class JosephApp(ctk.CTk):
                     briefing=self._briefing,
                 )
 
+            # Phase 7 — Vision, File Manager, Autonomous Agent
+            self._init_phase7()
+
+            # Phase 9 — Notifications, Tray, Proactive, Multi-model, Plugins
+            self._init_phase9()
+
+            # Start API server in background
+            self._start_api_server()
+
             # Update sidebar
             self.after(0, self._update_phase5_sidebar)
-            logger.info("Phase 5 services initialized")
+            logger.info("All services initialized (Phase 5-8)")
 
         except Exception as e:
-            logger.warning(f"Phase 5 init failed: {e}")
+            logger.warning(f"Service init failed: {e}")
 
-    def _init_voice(self) -> None:
+    def _init_phase10(self) -> None:
+        """Initialize Phase 10 — Clipboard Monitor, Custom Commands, Personality Learning."""
+        try:
+            from brain.clipboard_monitor import ClipboardMonitor
+            from brain.custom_commands import CustomCommandManager
+            from brain.personality_learning import PersonalityLearning
+
+            # Clipboard monitor
+            self._clipboard_monitor = ClipboardMonitor(
+                on_suggestion=self._on_clipboard_suggestion
+            )
+            self._clipboard_monitor.start()
+
+            # Custom commands
+            self._custom_commands = CustomCommandManager()
+
+            # Personality learning
+            self._personality_learning = PersonalityLearning()
+
+            logger.info(
+                f"Phase 10 initialized — "
+                f"Clipboard: monitoring, "
+                f"Custom commands: {self._custom_commands.command_count}, "
+                f"Personality learning: active"
+            )
+        except Exception as e:
+            logger.warning(f"Phase 10 init failed: {e}")
+
+    def _on_clipboard_suggestion(self, suggestion: str, item) -> None:
+        """Called by clipboard monitor with a contextual suggestion."""
+        self.after(0, lambda: self._add_system_message(
+            suggestion, COLORS["text_dim"]
+        ))
+        self.after(0, self._scroll_to_bottom)
+
+    def _init_phase9(self) -> None:
+        """Initialize Phase 9 — Notifications, Tray, Proactive, Multi-model, Plugins."""
+        try:
+            from brain.notifications import NotificationSystem
+            from brain.system_tray import SystemTray
+            from brain.proactive import ProactiveEngine
+            from brain.multi_model import MultiModelRouter
+            from brain.plugin_system import PluginSystem
+            from brain.conversation_search import ConversationSearch
+
+            # Notifications
+            self._notifications = NotificationSystem()
+
+            # Update scheduler to also send notifications
+            if self._scheduler:
+                original_callback = self._scheduler.on_reminder
+                def enhanced_reminder(msg: str):
+                    original_callback(msg)
+                    self._notifications.send_reminder(msg)
+                self._scheduler.on_reminder = enhanced_reminder
+
+            # System tray
+            self._system_tray = SystemTray()
+            self._system_tray.start(
+                on_show=lambda: self.after(0, self.deiconify),
+                on_hide=lambda: self.after(0, self.withdraw),
+                on_voice=self._hotkey_activate,
+                on_briefing=self._hotkey_briefing,
+                on_exit=lambda: self.after(0, self._on_close),
+            )
+
+            # Proactive engine
+            self._proactive_engine = ProactiveEngine(
+                on_suggestion=self._on_proactive_suggestion
+            )
+            self._proactive_engine.attach_services(
+                notes=self._notes,
+                weather=self._weather,
+                scheduler=self._scheduler,
+                memory=self.memory,
+            )
+            self._proactive_engine.start()
+
+            # Multi-model router
+            self._multi_model_router = MultiModelRouter(llm_interface=self.llm)
+
+            # Plugin system
+            self._plugin_system = PluginSystem()
+            plugin_context = {
+                "llm": self.llm,
+                "memory": self.memory,
+                "notes": self._notes,
+                "weather": self._weather,
+                "scheduler": self._scheduler,
+            }
+            self._plugin_system.load_all(context=plugin_context)
+
+            # Conversation search
+            self._conversation_search = ConversationSearch(memory_manager=self.memory)
+
+            # Phase 10 — Clipboard, Custom Commands, Personality Learning
+            self._init_phase10()
+
+            logger.info("Phase 9 services initialized")
+
+        except Exception as e:
+            logger.warning(f"Phase 9 init failed: {e}")
+
+    def _on_proactive_suggestion(self, message: str) -> None:
+        """Called by proactive engine with a suggestion."""
+        # Show in chat
+        self.after(0, lambda: self._add_system_message(
+            f"💡 {message}", COLORS["accent"]
+        ))
+        self.after(0, self._scroll_to_bottom)
+        # Speak it
+        if self._voice and self._voice_enabled:
+            self._voice.tts.speak(message)
+        # Send Windows notification
+        if self._notifications:
+            self._notifications.send_alert(message)
+
+    def _init_phase7(self) -> None:
+        """Initialize Phase 7 — Vision, File Manager, Autonomous Agent."""
+        try:
+            from brain.vision import VisionSystem
+            from brain.file_manager import FileManager
+            from brain.personality_engine import AdvancedPersonality
+            from agents.autonomous_agent import AutonomousAgent
+
+            self._vision = VisionSystem(llm=self.llm)
+            self._file_manager = FileManager()
+            self._advanced_personality = AdvancedPersonality()
+            self._advanced_personality.load_from_memory(self.memory)
+
+            self._autonomous_agent = AutonomousAgent(
+                llm=self.llm,
+                tool_dispatcher=self._tool_dispatcher,
+                on_step=self._on_agent_step,
+            )
+
+            logger.info(
+                f"Phase 7 initialized — "
+                f"Vision: {self._vision.is_available}, "
+                f"Files: ready, "
+                f"Autonomous: ready"
+            )
+        except Exception as e:
+            logger.warning(f"Phase 7 init failed: {e}")
+
+    def _on_agent_step(self, step: int, action_type: str, result: str) -> None:
+        """Called by autonomous agent after each step — updates UI."""
+        self.after(0, lambda: self._add_system_message(
+            f"Step {step} [{action_type}]: {result[:80]}...",
+            COLORS["thinking"],
+        ))
+        self.after(0, self._scroll_to_bottom)
         """
         Initialize the voice system after the UI is ready.
         Runs 1 second after startup so the window appears first.
@@ -1396,8 +1670,131 @@ class JosephApp(ctk.CTk):
                 text_color=COLORS["success"],
             ))
 
+    # ------------------------------------------------------------------ #
+    # Phase 8 — Hotkeys, Google, API
+    # ------------------------------------------------------------------ #
+
+    def _hotkey_activate(self) -> None:
+        """Called by Ctrl+Shift+J — activate voice push-to-talk."""
+        self.after(0, self._toggle_voice)
+
+    def _hotkey_screenshot(self) -> None:
+        """Called by Ctrl+Shift+S — screenshot and analyze."""
+        def do_screenshot():
+            if self._vision:
+                result = self._vision.describe_screen()
+            elif self._file_manager:
+                path = self._file_manager._resolve_path
+                import pyautogui
+                path = str(settings.EXPORTS_DIR / f"screenshot_{datetime.now().strftime('%H%M%S')}.png")
+                pyautogui.screenshot(path)
+                result = f"Screenshot saved: {path}"
+            else:
+                result = "Vision system not available."
+            self.after(0, lambda: self._add_message_bubble("assistant", result))
+            self.after(0, self._scroll_to_bottom)
+
+        import threading
+        threading.Thread(target=do_screenshot, daemon=True).start()
+
+    def _hotkey_clipboard(self) -> None:
+        """Called by Ctrl+Shift+C — read clipboard."""
+        def do_clipboard():
+            import pyperclip
+            content = pyperclip.paste()
+            if content:
+                preview = content[:300] + "..." if len(content) > 300 else content
+                result = f"Clipboard:\n{preview}"
+            else:
+                result = "Clipboard is empty."
+            self.after(0, lambda: self._add_message_bubble("assistant", result))
+            self.after(0, self._scroll_to_bottom)
+
+        import threading
+        threading.Thread(target=do_clipboard, daemon=True).start()
+
+    def _hotkey_briefing(self) -> None:
+        """Called by Ctrl+Shift+B — daily briefing."""
+        def do_briefing():
+            if self._briefing:
+                result = self._briefing.generate()
+                if self._voice and self._voice_enabled:
+                    self._voice.tts.speak(result)
+            else:
+                result = "Briefing system not ready."
+            self.after(0, lambda: self._add_message_bubble("assistant", result))
+            self.after(0, self._scroll_to_bottom)
+
+        import threading
+        threading.Thread(target=do_briefing, daemon=True).start()
+
+    def _hotkey_note(self) -> None:
+        """Called by Ctrl+Shift+N — focus input for quick note."""
+        self.after(0, lambda: self._input_box.focus())
+        self.after(0, lambda: self._input_box.insert(0, "add note: "))
+
+    def _start_api_server(self) -> None:
+        """Start the FastAPI server in a background thread."""
+        try:
+            import uvicorn
+            from api.server import app as api_app, inject_services
+
+            # Inject all services into the API
+            inject_services(
+                llm=self.llm,
+                memory=self.memory,
+                personality=self.personality,
+                weather=self._weather,
+                notes=self._notes,
+                scheduler=self._scheduler,
+                google=self._google,
+                tool_dispatcher=self._tool_dispatcher,
+            )
+
+            config = uvicorn.Config(
+                api_app,
+                host=settings.API_HOST,
+                port=settings.API_PORT,
+                log_level="warning",
+                loop="asyncio",
+            )
+            server = uvicorn.Server(config)
+
+            self._api_server_thread = threading.Thread(
+                target=server.run,
+                daemon=True,
+                name="API-Server",
+            )
+            self._api_server_thread.start()
+            logger.info(
+                f"API server started at http://{settings.API_HOST}:{settings.API_PORT}"
+            )
+
+        except Exception as e:
+            logger.warning(f"API server failed to start: {e}")
+
     def _on_close(self):
         """Clean shutdown - save session before closing."""
+        try:
+            if self._hotkey_daemon:
+                self._hotkey_daemon.stop()
+        except Exception:
+            pass
+        try:
+            if self._system_tray:
+                self._system_tray.stop()
+        except Exception:
+            pass
+        try:
+            if self._proactive_engine:
+                self._proactive_engine.stop()
+        except Exception:
+            pass
+        try:
+            if self._clipboard_monitor:
+                self._clipboard_monitor.stop()
+        except Exception:
+            pass
         try:
             if self._voice:
                 self._voice.stop()

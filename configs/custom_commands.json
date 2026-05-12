@@ -1,0 +1,30 @@
+{
+  "morning routine": {
+    "description": "Start my morning with briefing and weather",
+    "actions": [
+      "give me a briefing",
+      "what's the weather today"
+    ]
+  },
+  "work mode": {
+    "description": "Set up for work",
+    "actions": [
+      "open VS Code",
+      "what are my pending tasks"
+    ]
+  },
+  "end of day": {
+    "description": "Wrap up the day",
+    "actions": [
+      "what tasks did I complete today",
+      "show my pending tasks"
+    ]
+  },
+  "focus mode": {
+    "description": "Start a focus session",
+    "actions": [
+      "play lofi music on YouTube",
+      "remind me in 45 minutes to take a break"
+    ]
+  }
+}

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JOSEPH</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 380px;
+      min-height: 500px;
+      background: #141414;
+      color: #ececec;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 13px;
+    }
+
+    /* Header */
+    .header {
+      background: #1e1e1e;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #4d9de0;
+    }
+    .header-icon { color: #4d9de0; font-size: 18px; }
+    .header-title { font-size: 15px; font-weight: 700; color: #ececec; }
+    .header-sub { font-size: 10px; color: #7a7a7a; margin-left: auto; }
+
+    /* Status */
+    .status-bar {
+      padding: 6px 16px;
+      background: #1a1a1a;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #7a7a7a;
+      border-bottom: 1px solid #333;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #3dba7a; }
+    .status-dot.offline { background: #d95f5f; }
+
+    /* Chat area */
+    .chat-area {
+      height: 280px;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-area::-webkit-scrollbar { width: 4px; }
+    .chat-area::-webkit-scrollbar-track { background: #1a1a1a; }
+    .chat-area::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+    /* Messages */
+    .message { display: flex; flex-direction: column; gap: 3px; }
+    .message-name { font-size: 10px; font-weight: 700; }
+    .message-name.joseph { color: #4d9de0; }
+    .message-name.user { color: #d0d0d0; }
+    .message-bubble {
+      padding: 8px 10px;
+      border-radius: 8px;
+      line-height: 1.5;
+      font-size: 12px;
+    }
+    .message-bubble.joseph {
+      background: #252525;
+      border-left: 3px solid #4d9de0;
+    }
+    .message-bubble.user { background: #2c2c2c; }
+
+    /* Quick actions */
+    .quick-actions {
+      padding: 8px 12px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      border-top: 1px solid #333;
+      border-bottom: 1px solid #333;
+      background: #1a1a1a;
+    }
+    .quick-btn {
+      padding: 4px 10px;
+      background: #252525;
+      border: 1px solid #333;
+      border-radius: 12px;
+      color: #ececec;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .quick-btn:hover { background: #333; border-color: #4d9de0; color: #4d9de0; }
+
+    /* Input area */
+    .input-area {
+      padding: 10px 12px;
+      display: flex;
+      gap: 8px;
+      background: #1e1e1e;
+    }
+    .input-box {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: #ececec;
+      font-size: 12px;
+      font-family: 'Segoe UI', sans-serif;
+      outline: none;
+      resize: none;
+      height: 36px;
+    }
+    .input-box:focus { border-color: #4d9de0; }
+    .input-box::placeholder { color: #555; }
+    .send-btn {
+      background: #4d9de0;
+      border: none;
+      border-radius: 8px;
+      padding: 0 14px;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 0.15s;
+    }
+    .send-btn:hover { background: #3d8dd0; }
+    .send-btn:disabled { background: #333; cursor: not-allowed; }
+
+    /* Thinking indicator */
+    .thinking {
+      color: #8b5cf6;
+      font-size: 11px;
+      padding: 4px 12px;
+      display: none;
+    }
+    .thinking.visible { display: block; }
+
+    /* Page context badge */
+    .page-context {
+      padding: 6px 12px;
+      background: #1a1a1a;
+      font-size: 10px;
+      color: #7a7a7a;
+      border-bottom: 1px solid #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .page-context span { color: #4d9de0; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-icon">◈</span>
+    <span class="header-title">JOSEPH</span>
+    <span class="header-sub">Personal AI</span>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Connecting...</span>
+  </div>
+
+  <!-- Current page context -->
+  <div class="page-context" id="pageContext">
+    Page: <span id="pageTitle">Loading...</span>
+  </div>
+
+  <!-- Chat area -->
+  <div class="chat-area" id="chatArea">
+    <div class="message">
+      <span class="message-name joseph">Joseph</span>
+      <div class="message-bubble joseph">
+        Hello! I can help you with this page. Ask me to summarize it, explain something, or answer questions about the content.
+      </div>
+    </div>
+  </div>
+
+  <!-- Thinking indicator -->
+  <div class="thinking" id="thinking">Joseph is thinking...</div>
+
+  <!-- Quick action buttons -->
+  <div class="quick-actions">
+    <button class="quick-btn" onclick="quickAction('Summarize this page')">Summarize</button>
+    <button class="quick-btn" onclick="quickAction('What are the key points on this page?')">Key Points</button>
+    <button class="quick-btn" onclick="quickAction('Explain this page simply')">Explain</button>
+    <button class="quick-btn" onclick="quickAction('Save a note about this page')">Save Note</button>
+  </div>
+
+  <!-- Input area -->
+  <div class="input-area">
+    <input
+      type="text"
+      class="input-box"
+      id="inputBox"
+      placeholder="Ask Joseph about this page..."
+    />
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

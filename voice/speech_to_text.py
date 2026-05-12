@@ -72,8 +72,8 @@ class SpeechToText:
             # after installing CUDA for GPU acceleration
             self._model = WhisperModel(
                 self.model_size,
-                device="cpu",
-                compute_type="int8",  # int8 is fastest on CPU
+                device="cuda",
+                compute_type="float16",  # GPU accelerated
                 num_workers=2,
             )
 
