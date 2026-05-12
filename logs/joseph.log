@@ -4712,3 +4712,24 @@ Call log:
 2026-05-11 21:45:38 | DEBUG    | comtypes._comobject            | <comtypes.client._events.CreateEventReceiver.<locals>.Sink object at 0x000001790E134590>.Release() -> 1
 2026-05-11 21:45:38 | DEBUG    | comtypes._comobject            | <comtypes.client._events.CreateEventReceiver.<locals>.Sink object at 0x000001790E134590>.AddRef() -> 2
 2026-05-11 21:45:38 | DEBUG    | comtypes._comobject            | <comtypes.client._events.CreateEventReceiver.<locals>.Sink object at 0x000001790E134590>.Release() -> 1
+2026-05-11 21:49:13 | INFO     | voice.wake_word                | Wake word detection stopped
+2026-05-11 21:49:13 | INFO     | voice.audio_manager            | Microphone stream stopped
+2026-05-11 21:49:13 | INFO     | voice.text_to_speech           | TTS engine stopped
+2026-05-11 21:49:13 | DEBUG    | voice.voice_controller         | Voice state: idle → disabled
+2026-05-11 21:49:13 | INFO     | voice.voice_controller         | Voice system stopped
+2026-05-11 21:49:14 | INFO     | automation.browser.playwright_controller | Browser closed
+2026-05-11 21:49:14 | DEBUG    | memory.long_term               | Saved conversation summary for session 8548bb29-1843-4208-a779-9bdf78680bab
+2026-05-11 21:49:14 | DEBUG    | memory.chroma_store            | ChromaDB: stored memory id=94574d48-9702-4b35-aafc-714977427cfa
+2026-05-11 21:49:14 | INFO     | memory.long_term               | Session ended: 8548bb29-1843-4208-a779-9bdf78680bab (13 messages)
+2026-05-11 21:49:14 | INFO     | memory.memory_manager          | Session ended: 8548bb29... (13 messages)
+2026-05-11 21:49:15 | INFO     | __main__                       | Joseph shutdown complete.
+2026-05-11 21:49:15 | DEBUG    | comtypes._post_coinit.unknwn   | Calling CoUninitialize()
+2026-05-11 21:49:15 | DEBUG    | comtypes._post_coinit.unknwn   | CoUninitialize() done.
+2026-05-11 21:49:15 | ERROR    | asyncio                        | Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<Connection.run() running at C:\Users\Grayson\Desktop\Joseph\venv\Lib\site-packages\playwright\_impl\_connection.py:314> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2026-05-11 21:49:15 | ERROR    | asyncio                        | Task was destroyed but it is pending!
+task: <Task pending name='Task-10' coro=<Connection.run() running at C:\Users\Grayson\Desktop\Joseph\venv\Lib\site-packages\playwright\_impl\_connection.py:314> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2026-05-11 21:49:15 | ERROR    | asyncio                        | Task was destroyed but it is pending!
+task: <Task pending name='Task-7' coro=<Connection.run() running at C:\Users\Grayson\Desktop\Joseph\venv\Lib\site-packages\playwright\_impl\_connection.py:314> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2026-05-11 21:49:15 | ERROR    | asyncio                        | Task was destroyed but it is pending!
+task: <Task pending name='Task-14' coro=<Connection.run() running at C:\Users\Grayson\Desktop\Joseph\venv\Lib\site-packages\playwright\_impl\_connection.py:314> wait_for=<Future pending cb=[Task.task_wakeup()]>>
