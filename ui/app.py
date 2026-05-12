@@ -99,6 +99,10 @@ class JosephApp(ctk.CTk):
         self._is_responding = False
         self._current_response = ""
 
+        # Voice controller (initialized after UI is built)
+        self._voice: Optional[object] = None
+        self._voice_enabled = False
+
         # Configure customtkinter
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
@@ -109,6 +113,9 @@ class JosephApp(ctk.CTk):
 
         # Start polling the response queue
         self._poll_response_queue()
+
+        # Initialize voice system after UI is ready
+        self.after(1000, self._init_voice)
 
     # ------------------------------------------------------------------ #
     # Window Setup
@@ -327,7 +334,7 @@ class JosephApp(ctk.CTk):
         ).pack(fill="x", pady=2)
 
     def _build_input_bar(self):
-        """Bottom input bar with text field and send button."""
+        """Bottom input bar with text field, voice button, and send button."""
         input_bar = ctk.CTkFrame(
             self,
             height=72,
@@ -347,10 +354,25 @@ class JosephApp(ctk.CTk):
         row.pack(fill="both", expand=True, padx=16, pady=10)
         row.grid_columnconfigure(0, weight=1)
 
+        # Voice button (push-to-talk)
+        self._voice_btn = ctk.CTkButton(
+            row,
+            text="🎤",
+            font=("Segoe UI", 16),
+            width=42,
+            height=42,
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border"],
+            text_color=COLORS["text_dim"],
+            corner_radius=8,
+            command=self._toggle_voice,
+        )
+        self._voice_btn.grid(row=0, column=0, padx=(0, 8), sticky="w")
+
         # Text input
         self._input_box = ctk.CTkEntry(
             row,
-            placeholder_text=f"Message {settings.JOSEPH_NAME}...",
+            placeholder_text=f"Message {settings.JOSEPH_NAME}... (or say '{settings.WAKE_WORD}')",
             font=FONTS["body"],
             height=42,
             fg_color=COLORS["input_bg"],
@@ -360,9 +382,8 @@ class JosephApp(ctk.CTk):
             placeholder_text_color=COLORS["text_dim"],
             corner_radius=8,
         )
-        self._input_box.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self._input_box.grid(row=0, column=1, sticky="ew", padx=(0, 10))
         self._input_box.bind("<Return>", lambda e: self._send_message())
-        self._input_box.bind("<Shift-Return>", lambda e: None)  # Allow shift+enter later
         self._input_box.focus()
 
         # Send button
@@ -378,7 +399,16 @@ class JosephApp(ctk.CTk):
             corner_radius=8,
             command=self._send_message,
         )
-        self._send_btn.grid(row=0, column=1)
+        self._send_btn.grid(row=0, column=2)
+
+        # Voice state indicator label
+        self._voice_state_label = ctk.CTkLabel(
+            input_bar,
+            text="",
+            font=FONTS["body_sm"],
+            text_color=COLORS["text_dim"],
+        )
+        self._voice_state_label.pack(side="bottom", pady=(0, 2))
 
     # ------------------------------------------------------------------ #
     # Sidebar Helpers
@@ -682,6 +712,17 @@ class JosephApp(ctk.CTk):
                     self._active_textbox.insert("end", f"\n[Error: {data}]")
                     self._finish_response(error=True)
 
+                elif msg_type == "voice_input":
+                    # Show voice-transcribed user message in chat
+                    self._add_message_bubble("user", f"🎤 {data}")
+                    self._scroll_to_bottom()
+
+                elif msg_type == "voice_response":
+                    # Show voice response in chat
+                    self._add_message_bubble("assistant", data)
+                    self._update_sidebar()
+                    self._scroll_to_bottom()
+
         except queue.Empty:
             pass
 
@@ -797,8 +838,160 @@ class JosephApp(ctk.CTk):
         self.memory.add_assistant_message(greeting)
         self._scroll_to_bottom()
 
+    # ------------------------------------------------------------------ #
+    # Voice System
+    # ------------------------------------------------------------------ #
+
+    def _init_voice(self) -> None:
+        """
+        Initialize the voice system after the UI is ready.
+        Runs 1 second after startup so the window appears first.
+        """
+        try:
+            from voice.voice_controller import VoiceController, VoiceState
+
+            self._voice = VoiceController(
+                on_text_callback=self._handle_voice_text,
+                on_state_change=self._on_voice_state_change,
+            )
+
+            # Start with wake word detection
+            started = self._voice.start(push_to_talk=False)
+
+            if started:
+                self._voice_enabled = True
+                self._voice_btn.configure(
+                    text_color=COLORS["success"],
+                    fg_color=COLORS["card"],
+                )
+                self._voice_state_label.configure(
+                    text=f"🎤 Listening for '{settings.WAKE_WORD}'...",
+                    text_color=COLORS["text_dim"],
+                )
+                logger.info("Voice system started from UI")
+            else:
+                self._voice_state_label.configure(
+                    text="🎤 Voice unavailable — text only",
+                    text_color=COLORS["text_dim"],
+                )
+
+        except Exception as e:
+            logger.warning(f"Voice init failed: {e}")
+            self._voice_state_label.configure(
+                text="🎤 Voice unavailable",
+                text_color=COLORS["text_dim"],
+            )
+
+    def _toggle_voice(self) -> None:
+        """Toggle push-to-talk listening."""
+        if not self._voice or not self._voice_enabled:
+            self._add_system_message(
+                "Voice system not available. Check microphone.",
+                COLORS["warning"],
+            )
+            return
+
+        from voice.voice_controller import VoiceState
+
+        if self._voice.state == VoiceState.IDLE:
+            # Trigger push-to-talk
+            self._voice_btn.configure(
+                fg_color=COLORS["error"],
+                text_color="#ffffff",
+            )
+            self._voice_state_label.configure(
+                text="🔴 Listening... speak now",
+                text_color=COLORS["error"],
+            )
+            self._voice.push_to_talk()
+        else:
+            self._add_system_message(
+                "Already listening or processing...",
+                COLORS["text_dim"],
+            )
+
+    def _handle_voice_text(self, text: str) -> str:
+        """
+        Called by VoiceController with transcribed speech.
+        Sends to LLM and returns response for TTS.
+
+        This runs on a background thread — uses queue to update UI.
+        """
+        logger.info(f"Voice input: '{text}'")
+
+        # Show user message in UI (thread-safe via queue)
+        self._response_queue.put(("voice_input", text))
+
+        # Add to memory
+        self.memory.add_user_message(text)
+
+        # Get LLM response (non-streaming for voice — cleaner for TTS)
+        try:
+            from brain.prompts import get_system_prompt
+
+            memory_context = self.memory.get_context_for_llm(query=text)
+            system_prompt = get_system_prompt(
+                user_name=settings.USER_NAME,
+                memory_context=memory_context,
+            )
+            messages = self.memory.get_conversation_history()
+
+            response = self.llm.chat(
+                messages=messages,
+                system_prompt=system_prompt,
+            )
+
+            if response:
+                formatted = self.personality.format_response(response)
+                self.memory.add_assistant_message(formatted)
+
+                # Show in UI
+                self._response_queue.put(("voice_response", formatted))
+
+                return formatted
+
+        except Exception as e:
+            logger.error(f"Voice LLM error: {e}")
+            error_msg = "Sorry, I had trouble processing that."
+            self._response_queue.put(("voice_response", error_msg))
+            return error_msg
+
+        return ""
+
+    def _on_voice_state_change(self, state) -> None:
+        """Called when voice state changes — updates UI indicators."""
+        from voice.voice_controller import VoiceState
+
+        state_display = {
+            VoiceState.IDLE: (f"🎤 Say '{settings.WAKE_WORD}'...", COLORS["text_dim"]),
+            VoiceState.WAKE_DETECTED: ("⚡ Wake word detected!", COLORS["accent"]),
+            VoiceState.LISTENING: ("🔴 Listening...", COLORS["error"]),
+            VoiceState.PROCESSING: ("⚙ Processing...", COLORS["warning"]),
+            VoiceState.SPEAKING: ("🔊 Speaking...", COLORS["success"]),
+            VoiceState.DISABLED: ("🎤 Voice disabled", COLORS["text_dim"]),
+        }
+
+        text, color = state_display.get(state, ("", COLORS["text_dim"]))
+
+        # Update UI on main thread
+        self.after(0, lambda: self._voice_state_label.configure(
+            text=text, text_color=color
+        ))
+
+        # Reset voice button color when idle
+        if state == VoiceState.IDLE:
+            self.after(0, lambda: self._voice_btn.configure(
+                fg_color=COLORS["card"],
+                text_color=COLORS["success"],
+            ))
+
     def _on_close(self):
         """Clean shutdown — save session before closing."""
+        try:
+            if self._voice:
+                self._voice.stop()
+        except Exception:
+            pass
         try:
             self.memory.end_session()
         except Exception:
