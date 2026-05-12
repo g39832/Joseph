@@ -31,6 +31,10 @@ DTYPE = np.float32        # Float32 audio samples
 CHUNK_DURATION = 0.1      # 100ms chunks
 CHUNK_SAMPLES = int(SAMPLE_RATE * CHUNK_DURATION)
 
+# Silence threshold — calibrated for Realtek laptop mic
+# Peak speech ~0.28, silence ~0.003
+SILENCE_THRESHOLD = 0.04
+
 
 class AudioManager:
     """
@@ -54,6 +58,9 @@ class AudioManager:
         self._is_streaming = False
         self._available = False
         self._check_availability()
+        # Auto-select best device if using default
+        if self.device_index == 0 or self.device_index is None:
+            self.device_index = self._find_best_device()
 
     def _check_availability(self) -> None:
         """Check if audio input is available."""
@@ -68,6 +75,37 @@ class AudioManager:
                 logger.warning("No audio input devices found")
         except Exception as e:
             logger.warning(f"Audio check failed: {e}")
+
+    def _find_best_device(self) -> Optional[int]:
+        """
+        Find the best real microphone device.
+        Prefers direct hardware mic over Sound Mapper/virtual devices.
+        Sound Mapper (index 0) can have lower gain — skip it.
+        """
+        try:
+            devices = sd.query_devices()
+            # Prefer devices with "Microphone" in name but NOT Sound Mapper
+            # and NOT virtual/SST variants (those can be duplicates)
+            preferred_keywords = ["microphone (realtek", "microphone ("]
+            skip_keywords = ["sound mapper", "primary sound", "sst", "stereo mix", "pc speaker"]
+
+            for keyword in preferred_keywords:
+                for i, d in enumerate(devices):
+                    name_lower = d["name"].lower()
+                    if (d["max_input_channels"] > 0
+                            and keyword in name_lower
+                            and not any(s in name_lower for s in skip_keywords)):
+                        logger.info(f"Selected mic device [{i}]: {d['name']}")
+                        return i
+
+            # Fall back to sounddevice default
+            default = sd.query_devices(kind="input")
+            logger.info(f"Using default mic: {default['name']}")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Device selection failed: {e}")
+            return None
 
     def list_devices(self) -> list[dict]:
         """
@@ -204,7 +242,7 @@ class AudioManager:
     def record_until_silence(
         self,
         max_seconds: float = 10.0,
-        silence_threshold: float = 0.01,
+        silence_threshold: float = None,
         silence_duration: float = 1.2,
     ) -> Optional[np.ndarray]:
         """
@@ -217,11 +255,14 @@ class AudioManager:
         Args:
             max_seconds: Maximum recording time.
             silence_threshold: RMS level below which audio is considered silence.
+                               Defaults to SILENCE_THRESHOLD (calibrated for Realtek mic).
             silence_duration: How long silence must last to stop recording.
 
         Returns:
             Numpy array of the recorded audio.
         """
+        if silence_threshold is None:
+            silence_threshold = SILENCE_THRESHOLD
         chunks = []
         silent_chunks = 0
         silence_chunks_needed = int(silence_duration / CHUNK_DURATION)

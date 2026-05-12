@@ -351,6 +351,28 @@ class MemoryManager:
         ]
         return "\n".join(lines)
 
+    def get_companion_context(self) -> str:
+        """
+        Build rich companion context for the LLM.
+        Includes facts, recent memories, and relationship info.
+        """
+        sections = []
+        facts = self.long_term.get_all_facts()
+        if facts:
+            lines = [f"- {k}: {v}" for k, v in facts.items()]
+            sections.append("User facts:\n" + "\n".join(lines))
+
+        recent = self.long_term.get_recent_memories(limit=5)
+        if recent:
+            lines = [f"- {m['content']}" for m in recent]
+            sections.append("Recent memories:\n" + "\n".join(lines))
+
+        summaries = self.long_term.get_recent_summaries(limit=1)
+        if summaries:
+            sections.append(f"Last conversation summary:\n{summaries[0]['summary']}")
+
+        return "\n\n".join(sections) if sections else ""
+
     def __repr__(self) -> str:
         return (
             f"MemoryManager(session={self.session_id[:8]}..., "

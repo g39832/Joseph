@@ -76,7 +76,8 @@ class VoiceController:
         # Initialize components
         self.audio = AudioManager()
         self.tts = TextToSpeech()
-        self.stt = SpeechToText()
+        from voice.speech_to_text import stt as _stt_singleton
+        self.stt = _stt_singleton
         self.wake_detector = WakeWordDetector(
             audio_manager=self.audio,
             on_wake_callback=self._on_wake_word,
@@ -190,9 +191,10 @@ class VoiceController:
     def _start_listening(self) -> None:
         """Start recording user speech."""
         self._set_state(VoiceState.LISTENING)
+        # Flush stale audio, then wait briefly so user has time to start speaking
         self.audio.flush_buffer()
+        time.sleep(0.4)  # 400ms grace period before recording starts
 
-        # Record on background thread
         thread = threading.Thread(
             target=self._record_and_process,
             daemon=True,
@@ -205,26 +207,28 @@ class VoiceController:
         Background thread: record speech, transcribe, get response.
         """
         try:
-            logger.debug("Recording user speech...")
+            logger.info("Recording user speech — speak now...")
 
-            # Record until silence
+            # Record until silence — uses calibrated threshold
             audio = self.audio.record_until_silence(
-                max_seconds=12.0,
-                silence_threshold=0.015,
-                silence_duration=1.0,
+                max_seconds=15.0,
+                silence_duration=1.8,   # Wait 1.8s of silence before stopping
             )
 
             if audio is None:
-                logger.debug("No speech detected")
+                logger.info("No speech detected in recording")
                 self._return_to_idle()
                 return
+
+            duration = len(audio) / 16000
+            logger.info(f"Recorded {duration:.1f}s of audio — transcribing...")
 
             # Transcribe
             self._set_state(VoiceState.PROCESSING)
             text = self.stt.transcribe(audio)
 
             if not text:
-                logger.debug("Transcription returned empty")
+                logger.info("Transcription returned empty — nothing understood")
                 self._return_to_idle()
                 return
 

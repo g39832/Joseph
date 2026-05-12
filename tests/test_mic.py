@@ -21,14 +21,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_mic_levels():
     """Record 5 seconds and show RMS levels while you speak."""
     import sounddevice as sd
+    from voice.audio_manager import AudioManager
 
     SAMPLE_RATE = 16000
     DURATION = 5
     CHUNK = 1600  # 100ms chunks
 
+    # Find the device Joseph will actually use
+    audio_mgr = AudioManager()
+    device = audio_mgr.device_index
+    device_name = sd.query_devices(device)["name"] if device is not None else sd.query_devices(kind="input")["name"]
+
     print("\n" + "=" * 50)
     print("MICROPHONE LEVEL TEST")
     print("=" * 50)
+    print(f"Testing device: [{device}] {device_name}")
     print("Speak normally for 5 seconds...")
     print("Watch the level bars — this tells us your threshold.\n")
 
@@ -48,6 +55,7 @@ def test_mic_levels():
         channels=1,
         dtype=np.float32,
         blocksize=CHUNK,
+        device=device,
         callback=callback,
     ):
         time.sleep(DURATION)

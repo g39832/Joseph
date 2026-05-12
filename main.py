@@ -49,7 +49,6 @@ def run_gui(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEn
         print("Falling back to CLI. Run with --cli to skip this message.\n")
         run_cli(llm, memory, personality)
 
-
 def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEngine):
     """Launch the terminal CLI interface."""
     from ui.cli_interface import CLIInterface

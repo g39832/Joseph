@@ -131,10 +131,11 @@ class SpeechToText:
                 audio,
                 language=language,
                 beam_size=5,
-                vad_filter=True,           # Filter out non-speech
+                vad_filter=True,
                 vad_parameters={
-                    "min_silence_duration_ms": 500,
-                    "speech_pad_ms": 200,
+                    "min_silence_duration_ms": 800,   # Wait longer before cutting
+                    "speech_pad_ms": 400,              # Pad more around speech
+                    "threshold": 0.3,                  # Less aggressive — catch quiet speech
                 },
                 condition_on_previous_text=False,
             )

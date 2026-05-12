@@ -33,6 +33,7 @@ Colors (modern dark gray palette):
 
 import logging
 import queue
+import asyncio
 import threading
 from datetime import datetime
 from typing import Optional
@@ -102,6 +103,14 @@ class JosephApp(ctk.CTk):
         # Voice controller (initialized after UI is built)
         self._voice: Optional[object] = None
         self._voice_enabled = False
+
+        # Automation router (initialized lazily)
+        self._router: Optional[object] = None
+
+        # Phase 4 agents
+        self._memory_agent: Optional[object] = None
+        self._task_agent: Optional[object] = None
+        self._planner: Optional[object] = None
 
         # Configure customtkinter
         ctk.set_appearance_mode("dark")
@@ -332,6 +341,12 @@ class JosephApp(ctk.CTk):
             corner_radius=6,
             command=self._cmd_memory_status,
         ).pack(fill="x", pady=2)
+
+        self._add_divider(content)
+        self._add_sidebar_section(content, "AGENTS")
+        self._agent_status = self._add_sidebar_stat(content, "Memory", "Active")
+        self._add_sidebar_stat(content, "Planner", "Active")
+        self._add_sidebar_stat(content, "Tasks", "Ready")
 
     def _build_input_bar(self):
         """Bottom input bar with text field, voice button, and send button."""
@@ -665,30 +680,96 @@ class JosephApp(ctk.CTk):
 
     def _llm_worker(self, user_text: str):
         """
-        Background thread: calls LLM and puts chunks in the queue.
-        Never touches the UI directly — only uses the queue.
+        Background thread: planner decides routing, then executes.
         """
         try:
+            # Check if multi-step task
+            if (self._planner and self._task_agent and
+                    self._planner.should_use_task_agent(user_text)):
+                if self._router:
+                    self._task_agent.set_router(self._router)
+                result = self._task_agent.execute(user_text)
+                if result:
+                    self._response_queue.put(("automation_done", result))
+                    return
+
+            # Check single automation command
+            automation_result = self._try_automation(user_text)
+            if automation_result:
+                self._response_queue.put(("automation_done", automation_result))
+                # Run memory agent in background
+                if self._memory_agent:
+                    import threading
+                    threading.Thread(
+                        target=self._memory_agent.process_exchange,
+                        args=(user_text, automation_result),
+                        daemon=True,
+                    ).start()
+                return
+
+            # Regular chat — stream from LLM
             from brain.prompts import get_system_prompt
 
             memory_context = self.memory.get_context_for_llm(query=user_text)
+            # Add companion context
+            companion_ctx = self.memory.get_companion_context()
+            if companion_ctx:
+                memory_context = companion_ctx + "\n\n" + memory_context
+
             system_prompt = get_system_prompt(
                 user_name=settings.USER_NAME,
                 memory_context=memory_context,
             )
             messages = self.memory.get_conversation_history()
 
+            full_response = ""
             for chunk in self.llm.chat_stream(
                 messages=messages,
                 system_prompt=system_prompt,
             ):
                 self._response_queue.put(("chunk", chunk))
+                full_response += chunk
 
             self._response_queue.put(("done", None))
+
+            # Run memory agent in background
+            if self._memory_agent and full_response:
+                import threading
+                threading.Thread(
+                    target=self._memory_agent.process_exchange,
+                    args=(user_text, full_response),
+                    daemon=True,
+                ).start()
 
         except Exception as e:
             logger.error(f"LLM worker error: {e}")
             self._response_queue.put(("error", str(e)))
+
+    def _try_automation(self, user_text: str) -> Optional[str]:
+        """
+        Try to handle user_text as an automation command.
+
+        Returns:
+            Response string if automation handled it, None if it's just chat.
+        """
+        try:
+            from automation.command_router import CommandRouter
+
+            # Initialize router once, pass LLM for smart parsing
+            if self._router is None:
+                self._router = CommandRouter(llm=self.llm)
+            else:
+                self._router.set_llm(self.llm)
+
+            response, was_automated = self._router.handle_sync(user_text)
+
+            if was_automated and response:
+                return response
+
+        except Exception as e:
+            logger.debug(f"Automation check error: {e}")
+
+        return None
 
     def _poll_response_queue(self):
         """
@@ -711,6 +792,15 @@ class JosephApp(ctk.CTk):
                 elif msg_type == "error":
                     self._active_textbox.insert("end", f"\n[Error: {data}]")
                     self._finish_response(error=True)
+
+                elif msg_type == "automation_done":
+                    # Automation completed — show result, speak it
+                    self._active_textbox.insert("end", data)
+                    self._resize_textbox(self._active_textbox, data)
+                    self._current_response = data
+                    self._finish_response()
+                    if self._voice and self._voice_enabled:
+                        self._voice.tts.speak(data)
 
                 elif msg_type == "voice_input":
                     # Show voice-transcribed user message in chat
@@ -830,6 +920,7 @@ class JosephApp(ctk.CTk):
 
         # Show greeting on a slight delay so UI renders first
         self.after(400, self._show_greeting)
+        self.after(1500, self._init_agents)
 
     def _show_greeting(self):
         """Show Joseph's opening greeting."""
@@ -841,6 +932,23 @@ class JosephApp(ctk.CTk):
     # ------------------------------------------------------------------ #
     # Voice System
     # ------------------------------------------------------------------ #
+
+    def _init_agents(self) -> None:
+        """Initialize Phase 4 agents."""
+        try:
+            from agents.memory_agent import MemoryAgent
+            from agents.task_agent import TaskAgent
+            from agents.planner_agent import PlannerAgent
+
+            self._memory_agent = MemoryAgent(
+                memory_manager=self.memory,
+                llm=self.llm,
+            )
+            self._task_agent = TaskAgent(llm=self.llm)
+            self._planner = PlannerAgent(llm=self.llm)
+            logger.info("Phase 4 agents initialized")
+        except Exception as e:
+            logger.warning(f"Agent init failed: {e}")
 
     def _init_voice(self) -> None:
         """
@@ -913,19 +1021,24 @@ class JosephApp(ctk.CTk):
     def _handle_voice_text(self, text: str) -> str:
         """
         Called by VoiceController with transcribed speech.
-        Sends to LLM and returns response for TTS.
-
-        This runs on a background thread — uses queue to update UI.
+        Checks automation first, then falls back to LLM.
         """
         logger.info(f"Voice input: '{text}'")
 
-        # Show user message in UI (thread-safe via queue)
+        # Show user message in UI
         self._response_queue.put(("voice_input", text))
 
         # Add to memory
         self.memory.add_user_message(text)
 
-        # Get LLM response (non-streaming for voice — cleaner for TTS)
+        # Try automation first (open YouTube, open Notepad, etc.)
+        automation_result = self._try_automation(text)
+        if automation_result:
+            self.memory.add_assistant_message(automation_result)
+            self._response_queue.put(("voice_response", automation_result))
+            return automation_result
+
+        # Regular chat — get LLM response
         try:
             from brain.prompts import get_system_prompt
 
@@ -944,15 +1057,12 @@ class JosephApp(ctk.CTk):
             if response:
                 formatted = self.personality.format_response(response)
                 self.memory.add_assistant_message(formatted)
-
-                # Show in UI
                 self._response_queue.put(("voice_response", formatted))
-
                 return formatted
 
         except Exception as e:
             logger.error(f"Voice LLM error: {e}")
-            error_msg = "Sorry, I had trouble processing that."
+            error_msg = "Sorry, something went wrong."
             self._response_queue.put(("voice_response", error_msg))
             return error_msg
 
@@ -990,6 +1100,11 @@ class JosephApp(ctk.CTk):
         try:
             if self._voice:
                 self._voice.stop()
+        except Exception:
+            pass
+        try:
+            if self._router:
+                self._router._loop.run_until_complete(self._router.close())
         except Exception:
             pass
         try:
