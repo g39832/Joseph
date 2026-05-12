@@ -1,0 +1,93 @@
+2026-05-11 19:54:56 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-11 19:54:57 | INFO     | __main__                       | ============================================================
+2026-05-11 19:54:57 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-11 19:54:57 | INFO     | __main__                       | ============================================================
+2026-05-11 19:54:57 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-11 19:54:57 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-11 19:54:57 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-11 19:54:59 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=0
+2026-05-11 19:54:59 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 28ebce31...)
+2026-05-11 19:55:01 | DEBUG    | brain.llm_interface            | Available Ollama models: ['llama3:latest']
+2026-05-11 19:55:01 | INFO     | brain.llm_interface            | LLM ready: llama3
+2026-05-11 19:55:01 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-11 19:55:01 | INFO     | memory.long_term               | Session started: 26537a92-c236-416f-ba06-4a1bb590648a
+2026-05-11 19:55:01 | INFO     | memory.memory_manager          | Session started: 26537a92...
+2026-05-11 19:55:01 | INFO     | __main__                       | Chat loop started
+2026-05-11 19:55:10 | DEBUG    | memory.short_term              | STM add [user]: hello?...
+2026-05-11 19:55:10 | DEBUG    | memory.memory_manager          | User message added to STM: hello?
+2026-05-11 19:55:10 | DEBUG    | brain.llm_interface            | Streaming from llama3
+2026-05-11 19:56:32 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-11 19:56:33 | INFO     | __main__                       | ============================================================
+2026-05-11 19:56:33 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-11 19:56:33 | INFO     | __main__                       | ============================================================
+2026-05-11 19:56:33 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-11 19:56:33 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-11 19:56:33 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-11 19:56:34 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=0
+2026-05-11 19:56:34 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 7ffa2c71...)
+2026-05-11 19:56:36 | DEBUG    | brain.llm_interface            | Available Ollama models: ['llama3:latest']
+2026-05-11 19:56:36 | INFO     | brain.llm_interface            | LLM ready: llama3
+2026-05-11 19:56:36 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-11 19:56:36 | INFO     | memory.long_term               | Session started: 76330af4-5a1b-44bc-b4e2-6cf33ed6beea
+2026-05-11 19:56:36 | INFO     | memory.memory_manager          | Session started: 76330af4...
+2026-05-11 19:56:36 | INFO     | __main__                       | Chat loop started
+2026-05-11 19:56:43 | DEBUG    | memory.short_term              | STM add [user]: how are you doing?...
+2026-05-11 19:56:43 | DEBUG    | memory.memory_manager          | User message added to STM: how are you doing?
+2026-05-11 19:56:43 | DEBUG    | brain.llm_interface            | Streaming from llama3
+2026-05-11 19:57:55 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-11 19:57:56 | INFO     | __main__                       | ============================================================
+2026-05-11 19:57:56 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-11 19:57:56 | INFO     | __main__                       | ============================================================
+2026-05-11 19:57:56 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-11 19:57:56 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-11 19:57:56 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-11 19:57:57 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=0
+2026-05-11 19:57:57 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 2b87419a...)
+2026-05-11 19:57:59 | DEBUG    | brain.llm_interface            | Available Ollama models: ['llama3:latest']
+2026-05-11 19:57:59 | INFO     | brain.llm_interface            | LLM ready: llama3
+2026-05-11 19:57:59 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-11 19:57:59 | INFO     | memory.long_term               | Session started: 9a6a6a15-b118-4cb9-b068-a1d57ef57ebc
+2026-05-11 19:57:59 | INFO     | memory.memory_manager          | Session started: 9a6a6a15...
+2026-05-11 19:57:59 | INFO     | __main__                       | Chat loop started
+2026-05-11 19:58:07 | DEBUG    | memory.short_term              | STM add [user]: how are you joseph...
+2026-05-11 19:58:07 | DEBUG    | memory.memory_manager          | User message added to STM: how are you joseph
+2026-05-11 19:58:07 | DEBUG    | brain.llm_interface            | Streaming from llama3
+2026-05-11 19:58:42 | DEBUG    | memory.short_term              | STM add [assistant]: I'm functioning within optimal parameters, thank you for ask...
+2026-05-11 19:58:42 | DEBUG    | memory.memory_manager          | Assistant message added to STM: I'm functioning within optimal parameters, thank you for ask
+2026-05-11 19:58:59 | DEBUG    | memory.chroma_store            | ChromaDB: stored memory id=77717648-a58a-46db-8d14-91c2bf9ce6e9
+2026-05-11 19:58:59 | DEBUG    | memory.memory_manager          | Extracted facts saved: Here is the extracted information:
+
+• The person being addressed is named Joseph.
+
+That's it! Since 
+2026-05-11 19:59:18 | DEBUG    | memory.short_term              | STM add [user]: can you tell me something intresting like a fun fact?...
+2026-05-11 19:59:18 | DEBUG    | memory.memory_manager          | User message added to STM: can you tell me something intresting like a fun fact?
+2026-05-11 19:59:19 | DEBUG    | memory.chroma_store            | ChromaDB search 'can you tell me something intr...': 0 results
+2026-05-11 19:59:19 | DEBUG    | brain.llm_interface            | Streaming from llama3
+2026-05-11 19:59:37 | DEBUG    | memory.short_term              | STM add [assistant]: Boss! I've got one that might fascinate you.
+
+Did you know t...
+2026-05-11 19:59:37 | DEBUG    | memory.memory_manager          | Assistant message added to STM: Boss! I've got one that might fascinate you.
+
+Did you know t
+2026-05-11 20:01:32 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-11 20:01:33 | INFO     | __main__                       | ============================================================
+2026-05-11 20:01:33 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-11 20:01:33 | INFO     | __main__                       | ============================================================
+2026-05-11 20:01:34 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-11 20:01:34 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-11 20:01:34 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-11 20:01:34 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=1
+2026-05-11 20:01:34 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 38ebcb3f...)
+2026-05-11 20:01:36 | DEBUG    | brain.llm_interface            | Available Ollama models: ['llama3:latest']
+2026-05-11 20:01:36 | INFO     | brain.llm_interface            | LLM ready: llama3
+2026-05-11 20:01:36 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-11 20:01:36 | INFO     | memory.long_term               | Session started: 8e1b588a-f473-4e47-805b-95be3f5e71c1
+2026-05-11 20:01:36 | INFO     | memory.memory_manager          | Session started: 8e1b588a...
+2026-05-11 20:01:36 | INFO     | __main__                       | Chat loop started
+2026-05-11 20:01:50 | DEBUG    | memory.short_term              | STM add [user]: hello joseph my dad mark wants to say hi...
+2026-05-11 20:01:50 | DEBUG    | memory.memory_manager          | User message added to STM: hello joseph my dad mark wants to say hi
+2026-05-11 20:01:51 | DEBUG    | memory.chroma_store            | ChromaDB search 'hello joseph my dad mark wants...': 1 results
+2026-05-11 20:01:51 | DEBUG    | brain.llm_interface            | Streaming from llama3
+2026-05-11 20:02:02 | DEBUG    | memory.short_term              | STM add [assistant]: Hello there! It's great to hear from you, but just so we're ...
+2026-05-11 20:02:02 | DEBUG    | memory.memory_manager          | Assistant message added to STM: Hello there! It's great to hear from you, but just so we're 

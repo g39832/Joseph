@@ -1,0 +1,47 @@
+{
+  "assistant": {
+    "name": "Joseph",
+    "version": "1.0.0",
+    "phase": 1,
+    "personality": "calm, intelligent, helpful, slightly futuristic",
+    "response_style": "concise",
+    "language": "en"
+  },
+  "llm": {
+    "provider": "ollama",
+    "model": "llama3",
+    "fallback_model": "qwen2.5",
+    "temperature": 0.7,
+    "max_tokens": 1024,
+    "stream": true
+  },
+  "memory": {
+    "short_term_limit": 20,
+    "long_term_enabled": true,
+    "semantic_search_enabled": true,
+    "summarize_after_turns": 10,
+    "chroma_collection": "joseph_memory"
+  },
+  "voice": {
+    "wake_word": "joseph",
+    "whisper_model": "base.en",
+    "tts_enabled": false,
+    "push_to_talk": false
+  },
+  "safety": {
+    "confirm_shell_commands": true,
+    "confirm_file_deletion": true,
+    "confirm_email_sending": true,
+    "confirm_purchases": true,
+    "allowed_directories": ["./data", "./logs", "./exports"]
+  },
+  "scheduler": {
+    "enabled": false,
+    "timezone": "UTC"
+  },
+  "ui": {
+    "theme": "dark",
+    "show_timestamps": true,
+    "show_memory_status": true
+  }
+}
