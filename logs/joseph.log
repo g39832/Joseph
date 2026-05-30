@@ -8804,3 +8804,348 @@ wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v
 2026-05-26 13:40:07 | INFO     | memory.long_term               | Session ended: de17fd61-f060-4a89-b7bb-0c3a2825691c (5 messages)
 2026-05-26 13:40:07 | INFO     | memory.memory_manager          | Session ended: de17fd61... (5 messages)
 2026-05-26 13:40:07 | INFO     | __main__                       | Joseph shutdown complete.
+2026-05-30 08:16:48 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-30 08:16:50 | INFO     | __main__                       | ============================================================
+2026-05-30 08:16:50 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-30 08:16:50 | INFO     | __main__                       | ============================================================
+2026-05-30 08:16:50 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-30 08:16:50 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-30 08:16:50 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-30 08:16:52 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=18
+2026-05-30 08:16:52 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 1853ccb1...)
+2026-05-30 08:16:54 | DEBUG    | brain.llm_interface            | Available Ollama models: ['qwen2.5:14b', 'llama3.1:latest', 'llama3:latest']
+2026-05-30 08:16:54 | INFO     | brain.llm_interface            | LLM ready: qwen2.5:14b
+2026-05-30 08:16:56 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-30 08:16:56 | INFO     | memory.long_term               | Session started: 4c6e143f-d910-40d5-a9bf-e39209bebece
+2026-05-30 08:16:56 | INFO     | memory.memory_manager          | Session started: 4c6e143f...
+2026-05-30 08:16:57 | DEBUG    | memory.short_term              | STM add [assistant]: Good morning. How can I help you start the day?...
+2026-05-30 08:16:57 | DEBUG    | memory.memory_manager          | Assistant message added to STM: Good morning. How can I help you start the day?
+2026-05-30 08:16:58 | INFO     | voice.kokoro_tts               | Loading Kokoro TTS model (first run downloads ~80MB)...
+2026-05-30 08:17:00 | INFO     | voice.kokoro_tts               | Kokoro TTS ready in 2.0s — voice: am_adam
+2026-05-30 08:17:00 | INFO     | voice.text_to_speech           | TTS: Using Kokoro neural voice
+2026-05-30 08:17:09 | INFO     | voice.speech_to_text           | Loading Whisper model 'small.en'... (first run downloads the model)
+2026-05-30 08:17:11 | INFO     | voice.speech_to_text           | Whisper model loaded in 2.0s
+2026-05-30 08:17:11 | INFO     | voice.audio_manager            | Audio available: 11 input device(s)
+2026-05-30 08:17:11 | DEBUG    | voice.audio_manager            | Default input: Microphone (Realtek(R) Audio)
+2026-05-30 08:17:11 | INFO     | voice.audio_manager            | Selected mic device [1]: Microphone (Realtek(R) Audio)
+2026-05-30 08:17:11 | INFO     | voice.kokoro_tts               | Loading Kokoro TTS model (first run downloads ~80MB)...
+2026-05-30 08:17:13 | INFO     | voice.kokoro_tts               | Kokoro TTS ready in 1.7s — voice: am_adam
+2026-05-30 08:17:13 | INFO     | voice.text_to_speech           | TTS: Using Kokoro neural voice
+2026-05-30 08:17:13 | INFO     | voice.wake_word                | Voice fingerprint loaded (20 samples, threshold=36.49)
+2026-05-30 08:17:15 | WARNING  | voice.wake_word                | openWakeWord failed to load: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject. Wake word detection disabled. You can still use push-to-talk (🎤 button).
+2026-05-30 08:17:15 | INFO     | voice.voice_controller         | VoiceController initialized
+  TTS: True
+  STT: True
+  Wake word: False
+  Microphone: True
+2026-05-30 08:17:16 | INFO     | voice.audio_manager            | Microphone stream started (device=1, rate=16000Hz)
+2026-05-30 08:17:16 | WARNING  | voice.voice_controller         | Wake word unavailable, falling back to push-to-talk
+2026-05-30 08:17:16 | DEBUG    | voice.voice_controller         | Voice state: disabled → idle
+2026-05-30 08:17:16 | INFO     | ui.app                         | Voice system started from UI
+2026-05-30 08:17:16 | INFO     | ui.app                         | Phase 4 agents initialized
+2026-05-30 08:17:16 | INFO     | brain.notes                    | NotesManager initialized at C:\Users\Grayson\Desktop\Joseph\data\notes.db
+2026-05-30 08:17:16 | INFO     | brain.hotkey_daemon            | HotkeyDaemon: keyboard module available
+2026-05-30 08:17:16 | INFO     | brain.notes                    | NotesManager initialized at C:\Users\Grayson\Desktop\Joseph\data\notes.db
+2026-05-30 08:17:16 | INFO     | brain.context_awareness        | Context awareness monitoring started
+2026-05-30 08:17:16 | DEBUG    | tzlocal                        | Looking up time zone info from registry
+2026-05-30 08:17:16 | INFO     | scheduler.scheduler_manager    | SchedulerManager initialized
+2026-05-30 08:17:16 | INFO     | apscheduler.scheduler          | Scheduler started
+2026-05-30 08:17:16 | DEBUG    | apscheduler.scheduler          | Looking for jobs to run
+2026-05-30 08:17:16 | INFO     | scheduler.scheduler_manager    | Scheduler started
+2026-05-30 08:17:16 | INFO     | brain.hotkey_daemon            | HotkeyDaemon: keyboard module available
+2026-05-30 08:17:16 | DEBUG    | apscheduler.scheduler          | No jobs; waiting until a job is added
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+j — Activate Joseph (voice)
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+s — Screenshot + analyze
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+c — Read clipboard
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+b — Daily briefing
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+n — Quick note
+2026-05-30 08:17:17 | INFO     | brain.hotkey_daemon            | HotkeyDaemon started with 5 hotkeys:
+  ctrl+shift+j
+  ctrl+shift+s
+  ctrl+shift+c
+  ctrl+shift+b
+  ctrl+shift+n
+2026-05-30 08:17:17 | INFO     | brain.vision                   | VisionSystem: PIL available
+2026-05-30 08:17:17 | INFO     | brain.file_manager             | FileManager initialized with 5 allowed dirs
+2026-05-30 08:17:17 | INFO     | brain.vision                   | VisionSystem: PIL available
+2026-05-30 08:17:19 | INFO     | brain.vision                   | VisionSystem: No vision model found. Install with: ollama pull llava
+2026-05-30 08:17:19 | INFO     | brain.file_manager             | FileManager initialized with 5 allowed dirs
+2026-05-30 08:17:19 | INFO     | ui.app                         | Phase 7 initialized — Vision: True, Files: ready, Autonomous: ready
+2026-05-30 08:17:19 | INFO     | brain.notifications            | NotificationSystem: winotify available
+2026-05-30 08:17:19 | INFO     | brain.system_tray              | SystemTray: pystray available
+2026-05-30 08:17:19 | INFO     | brain.notifications            | NotificationSystem: winotify available
+2026-05-30 08:17:19 | INFO     | brain.system_tray              | SystemTray: pystray available
+2026-05-30 08:17:19 | INFO     | brain.system_tray              | System tray icon started
+2026-05-30 08:17:19 | INFO     | brain.proactive                | Proactive engine started
+2026-05-30 08:17:19 | INFO     | brain.multi_model              | Available models: ['qwen2.5', 'llama3.1', 'llama3']
+2026-05-30 08:17:19 | INFO     | brain.multi_model              | Model routing: fast=qwen2.5:3b, smart=llama3.1, code=llama3.1
+2026-05-30 08:17:19 | INFO     | brain.custom_commands          | Loaded 4 custom commands
+2026-05-30 08:17:19 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:17:19 | INFO     | brain.clipboard_monitor        | Clipboard monitor started
+2026-05-30 08:17:19 | DEBUG    | brain.clipboard_monitor        | Clipboard changed: type=long_text, len=844
+2026-05-30 08:17:19 | INFO     | brain.custom_commands          | Loaded 4 custom commands
+2026-05-30 08:17:19 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:17:19 | INFO     | ui.app                         | Phase 10 initialized — Clipboard: monitoring, Custom commands: 4, Personality learning: active
+2026-05-30 08:17:19 | INFO     | brain.spotify                  | Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env to enable music control.
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing AvifImagePlugin
+2026-05-30 08:17:19 | INFO     | brain.spotify                  | Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env to enable music control.
+2026-05-30 08:17:19 | INFO     | ui.app                         | Phase 11 initialized — Spotify, Focus Mode, Email Triage
+2026-05-30 08:17:19 | INFO     | ui.app                         | Phase 9 services initialized
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing BlpImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing BmpImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing BufrStubImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing CurImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing DcxImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing DdsImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing EpsImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing FitsImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing FliImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing FpxImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Image: failed to import FpxImagePlugin: No module named 'olefile'
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing FtexImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing GbrImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing GifImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing GribStubImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing Hdf5StubImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing IcnsImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing IcoImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing ImImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing ImtImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing IptcImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing JpegImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing Jpeg2KImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing McIdasImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing MicImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Image: failed to import MicImagePlugin: No module named 'olefile'
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing MpegImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing MpoImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing MspImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PalmImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PcdImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PcxImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PdfImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PixarImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PngImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PpmImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing PsdImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing QoiImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing SgiImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing SpiderImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing SunImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing TgaImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing TiffImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing WebPImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing WmfImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing XbmImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing XpmImagePlugin
+2026-05-30 08:17:19 | DEBUG    | PIL.Image                      | Importing XVThumbImagePlugin
+2026-05-30 08:17:19 | INFO     | api.server                     | API services injected: ['llm', 'memory', 'personality', 'weather', 'notes', 'scheduler', 'google', 'tool_dispatcher', 'hyper']
+2026-05-30 08:17:19 | INFO     | ui.app                         | API server started at http://127.0.0.1:8000
+2026-05-30 08:17:19 | INFO     | ui.app                         | All services initialized (Phase 5-8)
+2026-05-30 08:17:20 | INFO     | brain.weather                  | Location detected: Bowling Green, Kentucky
+2026-05-30 08:17:21 | INFO     | brain.weather                  | Weather fetched: 72°F, moderate rain
+2026-05-30 08:18:14 | DEBUG    | brain.clipboard_monitor        | Clipboard changed: type=url, len=31
+2026-05-30 08:18:31 | DEBUG    | brain.clipboard_monitor        | Clipboard changed: type=url, len=40
+2026-05-30 08:19:20 | INFO     | brain.hotkey_daemon            | HotkeyDaemon stopped
+2026-05-30 08:19:20 | INFO     | brain.system_tray              | System tray stopped
+2026-05-30 08:19:20 | INFO     | voice.wake_word                | Wake word detection stopped
+2026-05-30 08:19:20 | INFO     | voice.audio_manager            | Microphone stream stopped
+2026-05-30 08:19:20 | INFO     | voice.text_to_speech           | TTS engine stopped
+2026-05-30 08:19:20 | DEBUG    | voice.voice_controller         | Voice state: idle → disabled
+2026-05-30 08:19:20 | INFO     | voice.voice_controller         | Voice system stopped
+2026-05-30 08:19:20 | INFO     | apscheduler.scheduler          | Scheduler has been shut down
+2026-05-30 08:19:20 | DEBUG    | apscheduler.scheduler          | Looking for jobs to run
+2026-05-30 08:19:20 | DEBUG    | apscheduler.scheduler          | No jobs; waiting until a job is added
+2026-05-30 08:19:20 | INFO     | scheduler.scheduler_manager    | Scheduler stopped
+2026-05-30 08:19:20 | INFO     | memory.long_term               | Session ended: 4c6e143f-d910-40d5-a9bf-e39209bebece (1 messages)
+2026-05-30 08:19:20 | INFO     | memory.memory_manager          | Session ended: 4c6e143f... (1 messages)
+2026-05-30 08:19:20 | INFO     | __main__                       | Joseph shutdown complete.
+2026-05-30 08:19:22 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-30 08:19:23 | INFO     | __main__                       | ============================================================
+2026-05-30 08:19:23 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-30 08:19:23 | INFO     | __main__                       | ============================================================
+2026-05-30 08:19:23 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-30 08:19:23 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-30 08:19:23 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-30 08:19:24 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=18
+2026-05-30 08:19:24 | INFO     | memory.memory_manager          | MemoryManager initialized (session: 882a2700...)
+2026-05-30 08:19:24 | INFO     | hyper.engine                   | HyperIntelligenceEngine v1.0.0 initialized
+2026-05-30 08:19:24 | INFO     | hyper.monitor                  | System monitor started
+2026-05-30 08:19:24 | INFO     | hyper.learning                 | LearningEngine initialized
+2026-05-30 08:19:26 | DEBUG    | brain.llm_interface            | Available Ollama models: ['qwen2.5:14b', 'llama3.1:latest', 'llama3:latest']
+2026-05-30 08:19:26 | INFO     | brain.llm_interface            | LLM ready: qwen2.5:14b
+2026-05-30 08:19:28 | INFO     | hyper.gpu_manager              | GPU manager initialized: cuda
+2026-05-30 08:19:29 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:19:29 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:19:29 | INFO     | hyper.engine                   | HyperIntelligenceEngine fully initialized
+2026-05-30 08:19:35 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-30 08:19:35 | INFO     | memory.long_term               | Session started: 82cb062d-a83a-44ab-994a-10e2ba8986b8
+2026-05-30 08:19:35 | INFO     | memory.memory_manager          | Session started: 82cb062d...
+2026-05-30 08:19:36 | DEBUG    | memory.short_term              | STM add [assistant]: Morning, Boss. What are we working on today?...
+2026-05-30 08:19:36 | DEBUG    | memory.memory_manager          | Assistant message added to STM: Morning, Boss. What are we working on today?
+2026-05-30 08:19:37 | INFO     | voice.kokoro_tts               | Loading Kokoro TTS model (first run downloads ~80MB)...
+2026-05-30 08:19:38 | INFO     | voice.kokoro_tts               | Kokoro TTS ready in 1.2s — voice: am_adam
+2026-05-30 08:19:38 | INFO     | voice.text_to_speech           | TTS: Using Kokoro neural voice
+2026-05-30 08:19:41 | INFO     | voice.speech_to_text           | Loading Whisper model 'small.en'... (first run downloads the model)
+2026-05-30 08:19:43 | INFO     | voice.speech_to_text           | Whisper model loaded in 1.6s
+2026-05-30 08:19:43 | INFO     | voice.audio_manager            | Audio available: 11 input device(s)
+2026-05-30 08:19:43 | DEBUG    | voice.audio_manager            | Default input: Microphone (Realtek(R) Audio)
+2026-05-30 08:19:43 | INFO     | voice.audio_manager            | Selected mic device [1]: Microphone (Realtek(R) Audio)
+2026-05-30 08:19:43 | INFO     | voice.kokoro_tts               | Loading Kokoro TTS model (first run downloads ~80MB)...
+2026-05-30 08:19:44 | INFO     | voice.kokoro_tts               | Kokoro TTS ready in 1.5s — voice: am_adam
+2026-05-30 08:19:44 | INFO     | voice.text_to_speech           | TTS: Using Kokoro neural voice
+2026-05-30 08:19:44 | INFO     | voice.wake_word                | Voice fingerprint loaded (20 samples, threshold=36.49)
+2026-05-30 08:19:45 | WARNING  | voice.wake_word                | openWakeWord failed to load: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject. Wake word detection disabled. You can still use push-to-talk (🎤 button).
+2026-05-30 08:19:45 | INFO     | voice.voice_controller         | VoiceController initialized
+  TTS: True
+  STT: True
+  Wake word: False
+  Microphone: True
+2026-05-30 08:19:46 | INFO     | voice.audio_manager            | Microphone stream started (device=1, rate=16000Hz)
+2026-05-30 08:19:46 | WARNING  | voice.voice_controller         | Wake word unavailable, falling back to push-to-talk
+2026-05-30 08:19:46 | DEBUG    | voice.voice_controller         | Voice state: disabled → idle
+2026-05-30 08:19:46 | INFO     | ui.app                         | Voice system started from UI
+2026-05-30 08:19:46 | INFO     | ui.app                         | Phase 4 agents initialized
+2026-05-30 08:19:46 | INFO     | brain.notes                    | NotesManager initialized at C:\Users\Grayson\Desktop\Joseph\data\notes.db
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | HotkeyDaemon: keyboard module available
+2026-05-30 08:19:46 | INFO     | brain.notes                    | NotesManager initialized at C:\Users\Grayson\Desktop\Joseph\data\notes.db
+2026-05-30 08:19:46 | INFO     | brain.context_awareness        | Context awareness monitoring started
+2026-05-30 08:19:46 | DEBUG    | tzlocal                        | Looking up time zone info from registry
+2026-05-30 08:19:46 | INFO     | scheduler.scheduler_manager    | SchedulerManager initialized
+2026-05-30 08:19:46 | INFO     | apscheduler.scheduler          | Scheduler started
+2026-05-30 08:19:46 | DEBUG    | apscheduler.scheduler          | Looking for jobs to run
+2026-05-30 08:19:46 | INFO     | scheduler.scheduler_manager    | Scheduler started
+2026-05-30 08:19:46 | DEBUG    | apscheduler.scheduler          | No jobs; waiting until a job is added
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | HotkeyDaemon: keyboard module available
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+j — Activate Joseph (voice)
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+s — Screenshot + analyze
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+c — Read clipboard
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+b — Daily briefing
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | Hotkey registered: ctrl+shift+n — Quick note
+2026-05-30 08:19:46 | INFO     | brain.hotkey_daemon            | HotkeyDaemon started with 5 hotkeys:
+  ctrl+shift+j
+  ctrl+shift+s
+  ctrl+shift+c
+  ctrl+shift+b
+  ctrl+shift+n
+2026-05-30 08:19:46 | INFO     | brain.vision                   | VisionSystem: PIL available
+2026-05-30 08:19:46 | INFO     | brain.file_manager             | FileManager initialized with 5 allowed dirs
+2026-05-30 08:19:46 | INFO     | brain.vision                   | VisionSystem: PIL available
+2026-05-30 08:19:49 | INFO     | brain.vision                   | VisionSystem: No vision model found. Install with: ollama pull llava
+2026-05-30 08:19:49 | INFO     | brain.file_manager             | FileManager initialized with 5 allowed dirs
+2026-05-30 08:19:49 | INFO     | ui.app                         | Phase 7 initialized — Vision: True, Files: ready, Autonomous: ready
+2026-05-30 08:19:49 | INFO     | brain.notifications            | NotificationSystem: winotify available
+2026-05-30 08:19:49 | INFO     | brain.system_tray              | SystemTray: pystray available
+2026-05-30 08:19:49 | INFO     | brain.notifications            | NotificationSystem: winotify available
+2026-05-30 08:19:49 | INFO     | brain.system_tray              | SystemTray: pystray available
+2026-05-30 08:19:49 | INFO     | brain.system_tray              | System tray icon started
+2026-05-30 08:19:49 | INFO     | brain.proactive                | Proactive engine started
+2026-05-30 08:19:49 | INFO     | brain.multi_model              | Available models: ['qwen2.5', 'llama3.1', 'llama3']
+2026-05-30 08:19:49 | INFO     | brain.multi_model              | Model routing: fast=qwen2.5:3b, smart=llama3.1, code=llama3.1
+2026-05-30 08:19:49 | INFO     | brain.custom_commands          | Loaded 4 custom commands
+2026-05-30 08:19:49 | INFO     | brain.clipboard_monitor        | Clipboard monitor started
+2026-05-30 08:19:49 | INFO     | brain.custom_commands          | Loaded 4 custom commands
+2026-05-30 08:19:49 | DEBUG    | brain.clipboard_monitor        | Clipboard changed: type=url, len=40
+2026-05-30 08:19:49 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:19:49 | INFO     | ui.app                         | Phase 10 initialized — Clipboard: monitoring, Custom commands: 4, Personality learning: active
+2026-05-30 08:19:49 | INFO     | brain.spotify                  | Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env to enable music control.
+2026-05-30 08:19:49 | INFO     | brain.spotify                  | Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env to enable music control.
+2026-05-30 08:19:49 | INFO     | ui.app                         | Phase 11 initialized — Spotify, Focus Mode, Email Triage
+2026-05-30 08:19:49 | INFO     | ui.app                         | Phase 9 services initialized
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing AvifImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing BlpImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing BmpImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing BufrStubImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing CurImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing DcxImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing DdsImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing EpsImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing FitsImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing FliImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing FpxImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Image: failed to import FpxImagePlugin: No module named 'olefile'
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing FtexImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing GbrImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing GifImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing GribStubImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing Hdf5StubImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing IcnsImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing IcoImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing ImImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing ImtImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing IptcImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing JpegImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing Jpeg2KImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing McIdasImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing MicImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Image: failed to import MicImagePlugin: No module named 'olefile'
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing MpegImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing MpoImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing MspImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PalmImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PcdImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PcxImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PdfImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PixarImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PngImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PpmImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing PsdImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing QoiImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing SgiImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing SpiderImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing SunImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing TgaImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing TiffImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing WebPImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing WmfImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing XbmImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing XpmImagePlugin
+2026-05-30 08:19:49 | DEBUG    | PIL.Image                      | Importing XVThumbImagePlugin
+2026-05-30 08:19:49 | INFO     | api.server                     | API services injected: ['llm', 'memory', 'personality', 'weather', 'notes', 'scheduler', 'google', 'tool_dispatcher', 'hyper']
+2026-05-30 08:19:49 | INFO     | ui.app                         | API server started at http://127.0.0.1:8000
+2026-05-30 08:19:49 | INFO     | ui.app                         | All services initialized (Phase 5-8)
+2026-05-30 08:19:49 | INFO     | brain.weather                  | Location detected: Bowling Green, Kentucky
+2026-05-30 08:19:50 | INFO     | brain.weather                  | Weather fetched: 72°F, moderate rain
+2026-05-30 08:19:58 | INFO     | brain.hotkey_daemon            | HotkeyDaemon stopped
+2026-05-30 08:19:58 | INFO     | brain.system_tray              | System tray stopped
+2026-05-30 08:19:58 | INFO     | voice.wake_word                | Wake word detection stopped
+2026-05-30 08:19:58 | INFO     | voice.audio_manager            | Microphone stream stopped
+2026-05-30 08:19:58 | INFO     | voice.text_to_speech           | TTS engine stopped
+2026-05-30 08:19:58 | DEBUG    | voice.voice_controller         | Voice state: idle → disabled
+2026-05-30 08:19:58 | INFO     | voice.voice_controller         | Voice system stopped
+2026-05-30 08:19:58 | INFO     | apscheduler.scheduler          | Scheduler has been shut down
+2026-05-30 08:19:58 | DEBUG    | apscheduler.scheduler          | Looking for jobs to run
+2026-05-30 08:19:58 | DEBUG    | apscheduler.scheduler          | No jobs; waiting until a job is added
+2026-05-30 08:19:58 | INFO     | scheduler.scheduler_manager    | Scheduler stopped
+2026-05-30 08:19:58 | INFO     | memory.long_term               | Session ended: 82cb062d-a83a-44ab-994a-10e2ba8986b8 (1 messages)
+2026-05-30 08:19:58 | INFO     | memory.memory_manager          | Session ended: 82cb062d... (1 messages)
+2026-05-30 08:19:58 | INFO     | hyper.engine                   | HyperIntelligenceEngine stopped
+2026-05-30 08:19:58 | INFO     | hyper.engine                   | HyperIntelligenceEngine stopped
+2026-05-30 08:19:58 | INFO     | __main__                       | Joseph shutdown complete.
+2026-05-30 08:20:00 | INFO     | configs.logging_config         | Logging initialized — level=INFO, file=C:\Users\Grayson\Desktop\Joseph\logs\joseph.log
+2026-05-30 08:20:01 | INFO     | __main__                       | ============================================================
+2026-05-30 08:20:01 | INFO     | __main__                       | Starting Joseph v1.0 — Phase 1
+2026-05-30 08:20:01 | INFO     | __main__                       | ============================================================
+2026-05-30 08:20:02 | DEBUG    | memory.short_term              | ShortTermMemory initialized with limit=20
+2026-05-30 08:20:02 | DEBUG    | memory.long_term               | Database schema initialized
+2026-05-30 08:20:02 | INFO     | memory.long_term               | LongTermMemory initialized at C:\Users\Grayson\Desktop\Joseph\data\memory.db
+2026-05-30 08:20:03 | INFO     | memory.chroma_store            | ChromaDB ready: collection='joseph_memory', documents=18
+2026-05-30 08:20:03 | INFO     | memory.memory_manager          | MemoryManager initialized (session: a8348bcf...)
+2026-05-30 08:20:03 | INFO     | hyper.engine                   | HyperIntelligenceEngine v1.0.0 initialized
+2026-05-30 08:20:03 | INFO     | hyper.monitor                  | System monitor started
+2026-05-30 08:20:03 | INFO     | hyper.learning                 | LearningEngine initialized
+2026-05-30 08:20:05 | DEBUG    | brain.llm_interface            | Available Ollama models: ['qwen2.5:14b', 'llama3.1:latest', 'llama3:latest']
+2026-05-30 08:20:05 | INFO     | brain.llm_interface            | LLM ready: qwen2.5:14b
+2026-05-30 08:20:05 | INFO     | memory.short_term              | Short-term memory cleared (0 messages removed)
+2026-05-30 08:20:05 | INFO     | memory.long_term               | Session started: 1eb3607d-4300-4bad-8a85-7a853f39fe07
+2026-05-30 08:20:05 | INFO     | memory.memory_manager          | Session started: 1eb3607d...
+2026-05-30 08:20:05 | INFO     | __main__                       | CLI chat loop started
+2026-05-30 08:20:06 | INFO     | hyper.gpu_manager              | GPU manager initialized: cuda
+2026-05-30 08:20:06 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:20:06 | INFO     | brain.personality_learning     | PersonalityLearning initialized
+2026-05-30 08:20:06 | INFO     | hyper.engine                   | HyperIntelligenceEngine fully initialized
+2026-05-30 08:20:12 | INFO     | memory.long_term               | Session ended: 1eb3607d-4300-4bad-8a85-7a853f39fe07 (0 messages)
+2026-05-30 08:20:12 | INFO     | memory.memory_manager          | Session ended: 1eb3607d... (0 messages)
+2026-05-30 08:20:12 | INFO     | hyper.engine                   | HyperIntelligenceEngine stopped
+2026-05-30 08:20:12 | INFO     | hyper.engine                   | HyperIntelligenceEngine stopped
+2026-05-30 08:20:12 | INFO     | __main__                       | Joseph shutdown complete.

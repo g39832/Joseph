@@ -18,6 +18,7 @@ Phase 1 features:
 
 import logging
 import sys
+import time
 
 # ------------------------------------------------------------------ #
 # Step 1: Setup logging FIRST
@@ -35,26 +36,51 @@ from brain.personality import PersonalityEngine
 from brain.prompts import get_system_prompt
 from configs.settings import settings
 from memory.memory_manager import MemoryManager
+from hyper.bootstrap import (
+    create_hyper_engine,
+    finalize_hyper_turn,
+    enhance_response,
+    get_context_enhancement,
+    prepare_hyper_turn,
+    shutdown_hyper,
+)
 
 
-def run_gui(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEngine):
+def run_gui(
+    llm: LLMInterface,
+    memory: MemoryManager,
+    personality: PersonalityEngine,
+    hyper_engine=None,
+):
     """Launch the desktop GUI."""
     try:
         from ui.app import JosephApp
-        app = JosephApp(llm=llm, memory=memory, personality=personality)
+        app = JosephApp(
+            llm=llm,
+            memory=memory,
+            personality=personality,
+            hyper_engine=hyper_engine,
+        )
         app.mainloop()
     except ImportError as e:
         logger.error(f"GUI failed to import: {e}")
         print(f"\nGUI unavailable: {e}")
         print("Falling back to CLI. Run with --cli to skip this message.\n")
-        run_cli(llm, memory, personality)
+        run_cli(llm, memory, personality, hyper_engine=hyper_engine)
 
-def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEngine):
+def run_cli(
+    llm: LLMInterface,
+    memory: MemoryManager,
+    personality: PersonalityEngine,
+    hyper_engine=None,
+):
     """Launch the terminal CLI interface."""
     from ui.cli_interface import CLIInterface
 
     cli = CLIInterface()
     memory.start_session()
+    if hyper_engine and hasattr(hyper_engine, "set_session_context"):
+        hyper_engine.set_session_context(memory.session_id)
 
     cli.show_welcome(memory_status=memory.format_status())
     cli.show_joseph_response(personality.get_greeting())
@@ -99,6 +125,16 @@ def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEn
 
             memory.add_user_message(user_input)
             memory_context = memory.get_context_for_llm(query=user_input)
+            extra_context = get_context_enhancement(hyper_engine, user_input)
+            if extra_context:
+                memory_context = f"{memory_context}\n\n{extra_context}" if memory_context else extra_context
+            hyper_packet = prepare_hyper_turn(hyper_engine, user_input, memory=memory)
+            if hyper_packet.get("system_context"):
+                memory_context = (
+                    f"{memory_context}\n\n{hyper_packet['system_context']}"
+                    if memory_context
+                    else hyper_packet["system_context"]
+                )
             system_prompt = get_system_prompt(
                 user_name=settings.USER_NAME,
                 memory_context=memory_context,
@@ -107,6 +143,7 @@ def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEn
 
             cli.start_joseph_response()
             full_response = ""
+            response_started = time.perf_counter()
 
             try:
                 for chunk in llm.chat_stream(messages=messages, system_prompt=system_prompt):
@@ -119,7 +156,16 @@ def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEn
                 continue
 
             cli.end_joseph_response()
-            memory.add_assistant_message(personality.format_response(full_response))
+            final_response = personality.format_response(full_response)
+            final_response = enhance_response(hyper_engine, user_input, final_response, context={"mode": "cli"})
+            memory.add_assistant_message(final_response)
+            finalize_hyper_turn(
+                hyper_engine,
+                user_input,
+                final_response,
+                elapsed_seconds=time.perf_counter() - response_started,
+                memory=memory,
+            )
 
             try:
                 memory.extract_and_save_facts(user_input, llm)
@@ -137,6 +183,8 @@ def run_cli(llm: LLMInterface, memory: MemoryManager, personality: PersonalityEn
         memory.end_session()
     except Exception:
         pass
+
+    shutdown_hyper(hyper_engine)
 
     from ui.cli_interface import CLIInterface
     CLIInterface().show_goodbye()
@@ -157,6 +205,7 @@ def main():
     llm = LLMInterface()
     memory = MemoryManager()
     personality = PersonalityEngine()
+    hyper_engine = create_hyper_engine(llm=llm, memory=memory, personality=personality)
 
     # Health check
     if use_cli:
@@ -193,10 +242,11 @@ def main():
 
     # Launch
     if use_cli:
-        run_cli(llm, memory, personality)
+        run_cli(llm, memory, personality, hyper_engine=hyper_engine)
     else:
-        run_gui(llm, memory, personality)
+        run_gui(llm, memory, personality, hyper_engine=hyper_engine)
 
+    shutdown_hyper(hyper_engine)
     logger.info(f"{settings.JOSEPH_NAME} shutdown complete.")
 
 

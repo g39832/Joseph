@@ -49,15 +49,31 @@ class LongTermMemory:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or settings.MEMORY_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._use_memory_store = False
+        self._memory_conn = None
         self._initialize_database()
         logger.info(f"LongTermMemory initialized at {self.db_path}")
 
     @contextmanager
     def _get_connection(self):
         """Context manager for database connections with auto-commit/rollback."""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row  # Access columns by name
-        conn.execute("PRAGMA journal_mode=WAL")  # Better concurrent access
+        try:
+            if self._use_memory_store:
+                if self._memory_conn is None:
+                    self._memory_conn = sqlite3.connect(":memory:")
+                    self._memory_conn.row_factory = sqlite3.Row
+                conn = self._memory_conn
+            else:
+                conn = sqlite3.connect(str(self.db_path))
+                conn.row_factory = sqlite3.Row  # Access columns by name
+                conn.execute("PRAGMA journal_mode=WAL")  # Better concurrent access
+        except Exception as e:
+            logger.warning(f"LongTermMemory falling back to in-memory store: {e}")
+            self._use_memory_store = True
+            if self._memory_conn is None:
+                self._memory_conn = sqlite3.connect(":memory:")
+                self._memory_conn.row_factory = sqlite3.Row
+            conn = self._memory_conn
         try:
             yield conn
             conn.commit()
@@ -66,12 +82,59 @@ class LongTermMemory:
             logger.error(f"Database error: {e}")
             raise
         finally:
-            conn.close()
+            if not self._use_memory_store:
+                conn.close()
 
     def _initialize_database(self) -> None:
         """Create all tables if they don't exist."""
-        with self._get_connection() as conn:
-            conn.executescript("""
+        try:
+            with self._get_connection() as conn:
+                conn.executescript("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    message_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS user_facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT NOT NULL UNIQUE,
+                    value TEXT NOT NULL,
+                    confidence REAL DEFAULT 1.0,
+                    source TEXT DEFAULT 'extracted',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS memories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT NOT NULL,
+                    tags TEXT DEFAULT '[]',
+                    importance INTEGER DEFAULT 5,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    access_count INTEGER DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL UNIQUE,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ended_at TIMESTAMP,
+                    message_count INTEGER DEFAULT 0,
+                    notes TEXT DEFAULT ''
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_user_facts_key ON user_facts(key);
+                CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
+                CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id);
+            """)
+        except Exception as e:
+            logger.warning(f"LongTermMemory using in-memory database: {e}")
+            self._use_memory_store = True
+            with self._get_connection() as conn:
+                conn.executescript("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id TEXT NOT NULL,
@@ -310,6 +373,73 @@ class LongTermMemory:
             m["tags"] = json.loads(m["tags"])
             memories.append(m)
         return memories
+
+    def get_memory_by_id(self, memory_id: int) -> Optional[dict]:
+        """Return a single memory row by id."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """SELECT id, content, tags, importance, created_at, accessed_at, access_count
+                   FROM memories
+                   WHERE id = ?""",
+                (memory_id,),
+            ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        data["tags"] = json.loads(data["tags"] or "[]")
+        return data
+
+    def update_memory(
+        self,
+        memory_id: int,
+        content: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        importance: Optional[int] = None,
+    ) -> bool:
+        """Update one or more fields on a stored memory."""
+        current = self.get_memory_by_id(memory_id)
+        if not current:
+            return False
+
+        new_content = content if content is not None else current["content"]
+        new_tags = tags if tags is not None else current["tags"]
+        new_importance = importance if importance is not None else current["importance"]
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """UPDATE memories
+                   SET content = ?,
+                       tags = ?,
+                       importance = ?,
+                       accessed_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (new_content, json.dumps(new_tags), int(new_importance), memory_id),
+            )
+        return True
+
+    def delete_memory(self, memory_id: int) -> bool:
+        """Delete a stored memory."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        return cursor.rowcount > 0
+
+    def _set_memory_flag(self, memory_id: int, flag: str, enabled: bool) -> bool:
+        """Add or remove a tag flag on a memory."""
+        memory = self.get_memory_by_id(memory_id)
+        if not memory:
+            return False
+        tags = [t for t in memory["tags"] if t != flag]
+        if enabled:
+            tags.append(flag)
+        return self.update_memory(memory_id, tags=tags)
+
+    def pin_memory(self, memory_id: int, enabled: bool = True) -> bool:
+        """Mark a memory as important."""
+        return self._set_memory_flag(memory_id, "pinned", enabled)
+
+    def archive_memory(self, memory_id: int, enabled: bool = True) -> bool:
+        """Archive or unarchive a memory."""
+        return self._set_memory_flag(memory_id, "archived", enabled)
 
     def search_memories(self, query: str, limit: int = 5) -> list[dict]:
         """

@@ -189,9 +189,59 @@ class MemoryManager:
         self.chroma.add_memory(
             content=content,
             memory_id=str(memory_id),
-            metadata={"type": "explicit", "tags": str(tags or [])},
+            metadata={"type": "explicit", "tags": str(tags or []), "memory_id": memory_id},
         )
         logger.info(f"Explicit memory saved: {content[:60]}")
+
+    def get_recent_memories(self, limit: int = 20) -> list[dict]:
+        """Return the newest explicit memories."""
+        return self.long_term.get_recent_memories(limit=limit)
+
+    def get_memory_by_id(self, memory_id: int) -> Optional[dict]:
+        """Return a single memory record by id."""
+        return self.long_term.get_memory_by_id(memory_id)
+
+    def update_memory(
+        self,
+        memory_id: int,
+        content: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        importance: Optional[int] = None,
+    ) -> bool:
+        """Update one of the editable long-term memories."""
+        updated = self.long_term.update_memory(
+            memory_id,
+            content=content,
+            tags=tags,
+            importance=importance,
+        )
+        if updated and content is not None:
+            try:
+                self.chroma.upsert_memory(
+                    content=content,
+                    memory_id=str(memory_id),
+                    metadata={"type": "explicit", "tags": str(tags or []), "memory_id": memory_id},
+                )
+            except Exception:
+                pass
+        return updated
+
+    def delete_memory(self, memory_id: int) -> bool:
+        """Delete a stored memory from SQLite and vector memory."""
+        deleted = self.long_term.delete_memory(memory_id)
+        try:
+            self.chroma.delete_memory(str(memory_id))
+        except Exception:
+            pass
+        return deleted
+
+    def pin_memory(self, memory_id: int, enabled: bool = True) -> bool:
+        """Pin or unpin a memory."""
+        return self.long_term.pin_memory(memory_id, enabled=enabled)
+
+    def archive_memory(self, memory_id: int, enabled: bool = True) -> bool:
+        """Archive or unarchive a memory."""
+        return self.long_term.archive_memory(memory_id, enabled=enabled)
 
     def save_fact(self, key: str, value: str) -> None:
         """

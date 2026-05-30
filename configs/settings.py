@@ -133,6 +133,20 @@ class Settings:
         "show_memory_status", True
     )
 
+    # --- Hyper Intelligence Layer ---
+    ENABLE_HYPER_LAYER: bool = os.getenv("ENABLE_HYPER_LAYER", "false").lower() == "true"
+    ENABLE_HYPER_LEARNING: bool = os.getenv("ENABLE_HYPER_LEARNING", "true").lower() == "true"
+    ENABLE_HYPER_WEB: bool = os.getenv("ENABLE_HYPER_WEB", "true").lower() == "true"
+    ENABLE_HYPER_GPU: bool = os.getenv("ENABLE_HYPER_GPU", "true").lower() == "true"
+    ENABLE_HYPER_AGENT_ORCHESTRATION: bool = (
+        os.getenv("ENABLE_HYPER_AGENT_ORCHESTRATION", "true").lower() == "true"
+    )
+    ENABLE_HYPER_GRAPH: bool = os.getenv("ENABLE_HYPER_GRAPH", "true").lower() == "true"
+    ENABLE_HYPER_DASHBOARD: bool = os.getenv("ENABLE_HYPER_DASHBOARD", "true").lower() == "true"
+    ENABLE_HYPER_ANALYZER: bool = os.getenv("ENABLE_HYPER_ANALYZER", "true").lower() == "true"
+    HYPER_RESEARCH_TIMEOUT: int = int(os.getenv("HYPER_RESEARCH_TIMEOUT", "12"))
+    HYPER_MONITOR_INTERVAL: float = float(os.getenv("HYPER_MONITOR_INTERVAL", "5.0"))
+
     def ensure_directories(self) -> None:
         """Create all required data/log directories if they don't exist."""
         for directory in [self.DATA_DIR, self.LOG_DIR, self.EXPORTS_DIR]:

@@ -232,6 +232,51 @@ class ChromaMemoryStore:
             logger.error(f"ChromaDB delete error: {e}")
             return False
 
+    def upsert_memory(
+        self,
+        content: str,
+        memory_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """
+        Update an existing memory or insert it if it does not exist.
+
+        This keeps the vector store aligned with edited long-term memories.
+        """
+        if not self.is_available:
+            return False
+
+        try:
+            import uuid
+            from datetime import datetime
+
+            doc_id = memory_id or str(uuid.uuid4())
+            meta = metadata or {}
+            meta["timestamp"] = datetime.now().isoformat()
+            meta["source"] = meta.get("source", "conversation")
+
+            if hasattr(self._collection, "upsert"):
+                self._collection.upsert(
+                    documents=[content],
+                    ids=[doc_id],
+                    metadatas=[meta],
+                )
+            else:
+                try:
+                    self._collection.delete(ids=[doc_id])
+                except Exception:
+                    pass
+                self._collection.add(
+                    documents=[content],
+                    ids=[doc_id],
+                    metadatas=[meta],
+                )
+            logger.debug(f"ChromaDB: upserted memory id={doc_id}")
+            return True
+        except Exception as e:
+            logger.error(f"ChromaDB upsert error: {e}")
+            return False
+
     def get_count(self) -> int:
         """Return the number of stored memories."""
         if not self.is_available:
