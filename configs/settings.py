@@ -67,10 +67,10 @@ class Settings:
     )
     OLLAMA_TIMEOUT: int = int(os.getenv("OLLAMA_TIMEOUT", "120"))
     LLM_TEMPERATURE: float = float(
-        _json_cfg.get("llm", {}).get("temperature", 0.7)
+        _json_cfg.get("llm", {}).get("temperature", 0.65)
     )
     LLM_MAX_TOKENS: int = int(
-        _json_cfg.get("llm", {}).get("max_tokens", 1024)
+        _json_cfg.get("llm", {}).get("max_tokens", 768)
     )
     LLM_STREAM: bool = _json_cfg.get("llm", {}).get("stream", True)
 

@@ -1,0 +1,11 @@
+{
+  "model": "hey_jarvis",
+  "threshold": 0.45,
+  "custom_trained": true,
+  "num_samples": 20,
+  "avg_energy": 0.12955974824726582,
+  "note": "Threshold-based config \u2014 say 'Hey Jarvis' to activate",
+  "fingerprint_path": "C:\\Users\\Grayson\\Desktop\\Joseph\\configs\\joseph_fingerprint.pkl",
+  "use_fingerprint": true,
+  "wake_word": "joseph"
+}

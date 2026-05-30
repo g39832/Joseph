@@ -139,6 +139,41 @@ class TextToSpeech:
                 self.stop_speaking()
             self._speak_queue.put(clean)
 
+    def speak_sentence_stream(self, text_iterator, on_sentence: callable = None) -> None:
+        """
+        Stream TTS — speak each sentence as it arrives from the LLM.
+        Starts speaking the first sentence immediately without waiting
+        for the full response to complete.
+
+        Args:
+            text_iterator: Iterator yielding text chunks from LLM.
+            on_sentence: Optional callback called with each sentence spoken.
+        """
+        import re
+        buffer = ""
+        sentence_end = re.compile(r'(?<=[.!?])\s+|(?<=[.!?])$')
+
+        for chunk in text_iterator:
+            buffer += chunk
+            # Check if we have a complete sentence
+            parts = sentence_end.split(buffer)
+            if len(parts) > 1:
+                # Speak all complete sentences
+                for sentence in parts[:-1]:
+                    sentence = sentence.strip()
+                    if sentence and len(sentence) > 3:
+                        self.speak(sentence)
+                        if on_sentence:
+                            on_sentence(sentence)
+                # Keep the incomplete part
+                buffer = parts[-1]
+
+        # Speak any remaining text
+        if buffer.strip() and len(buffer.strip()) > 3:
+            self.speak(buffer.strip())
+            if on_sentence:
+                on_sentence(buffer.strip())
+
     def speak_sync(self, text: str) -> None:
         """Speak and wait until finished."""
         if not self._available:

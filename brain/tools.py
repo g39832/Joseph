@@ -67,7 +67,15 @@ Available tools (respond with JSON only):
 23. autonomous_goal: {"tool": "autonomous_goal", "goal": "complex multi-step goal description"}
 24. get_calendar: {"tool": "get_calendar"}
 25. get_emails: {"tool": "get_emails"}
-26. none: {"tool": "none"}
+26. spotify_play: {"tool": "spotify_play", "query": "song or artist name"}
+27. spotify_pause: {"tool": "spotify_pause"}
+28. spotify_next: {"tool": "spotify_next"}
+29. spotify_status: {"tool": "spotify_status"}
+30. start_focus: {"tool": "start_focus", "minutes": 25, "music": "lofi"}
+31. stop_focus: {"tool": "stop_focus"}
+32. focus_status: {"tool": "focus_status"}
+33. email_triage: {"tool": "email_triage"}
+34. none: {"tool": "none"}
 
 If the user's request doesn't need a tool (just conversation), use: {"tool": "none"}
 """
@@ -110,6 +118,23 @@ class ToolDispatcher:
         self.autonomous_agent = None
         # Phase 8
         self.google = None
+        # Phase 11
+        self.spotify = None
+        self.focus_mode = None
+        self.email_triage = None
+        # Tier 2 — structured output + confidence
+        self._structured_output = None
+        self._confidence_scorer = None
+
+    def attach_llm(self, llm) -> None:
+        self._llm = llm
+        # Initialize structured output when LLM is attached
+        if self._structured_output is None:
+            from brain.structured_output import StructuredOutput
+            self._structured_output = StructuredOutput(llm=llm)
+        if self._confidence_scorer is None:
+            from brain.confidence import ConfidenceScorer
+            self._confidence_scorer = ConfidenceScorer()
 
     def attach_llm(self, llm) -> None:
         self._llm = llm
@@ -127,17 +152,28 @@ class ToolDispatcher:
     def dispatch(self, user_input: str) -> tuple[str, bool]:
         """
         Parse user input and execute the appropriate tool.
-
-        Args:
-            user_input: Natural language request.
-
-        Returns:
-            (response_text, was_handled) — was_handled=False means pass to LLM chat.
+        Uses confidence scoring — asks for clarification if unsure.
         """
         if not self._llm:
             return "", False
 
         try:
+            # Confidence check before executing
+            if self._confidence_scorer:
+                should_exec, conf, reason = self._confidence_scorer.should_execute(user_input)
+                if not should_exec and conf < 40:
+                    # Very low confidence — don't even try automation
+                    logger.debug(f"Skipping automation (confidence={conf}%): {user_input[:40]}")
+                    return "", False
+
+            # Try structured output first (more reliable)
+            if self._structured_output:
+                tool_call = self._structured_output.extract_tool_call(user_input)
+                if tool_call and tool_call.get("tool") != "none":
+                    logger.info(f"Structured tool call: {tool_call}")
+                    return self._execute_tool(tool_call)
+
+            # Fall back to regex-based parsing
             tool_call = self._parse_tool_call(user_input)
             if not tool_call or tool_call.get("tool") == "none":
                 return "", False
@@ -341,7 +377,52 @@ class ToolDispatcher:
                 if self.google and self.google.is_available:
                     emails = self.google.get_recent_emails()
                     return self.google.format_emails(emails), True
-                return "Gmail not configured. Run: python brain/google_integration.py", True
+                return "Gmail not configured. Run: python -m brain.google_integration", True
+
+            # Phase 11 — Spotify
+            elif tool == "spotify_play":
+                if self.spotify:
+                    return self.spotify.play(tool_call.get("query", "")), True
+                return "Spotify not configured. Add SPOTIFY_CLIENT_ID to .env", True
+
+            elif tool == "spotify_pause":
+                if self.spotify:
+                    return self.spotify.pause(), True
+                return "Spotify not configured.", True
+
+            elif tool == "spotify_next":
+                if self.spotify:
+                    return self.spotify.next_track(), True
+                return "Spotify not configured.", True
+
+            elif tool == "spotify_status":
+                if self.spotify:
+                    return self.spotify.now_playing(), True
+                return "Spotify not configured.", True
+
+            # Phase 11 — Focus Mode
+            elif tool == "start_focus":
+                if self.focus_mode:
+                    minutes = int(tool_call.get("minutes", 25))
+                    music = tool_call.get("music", "lofi")
+                    return self.focus_mode.start(minutes, music), True
+                return "Focus mode not available.", True
+
+            elif tool == "stop_focus":
+                if self.focus_mode:
+                    return self.focus_mode.stop(), True
+                return "No active focus session.", True
+
+            elif tool == "focus_status":
+                if self.focus_mode:
+                    return self.focus_mode.status(), True
+                return "Focus mode not available.", True
+
+            # Phase 11 — Email Triage
+            elif tool == "email_triage":
+                if self.email_triage:
+                    return self.email_triage.get_morning_summary(), True
+                return "Email triage not available.", True
 
             else:
                 return "", False

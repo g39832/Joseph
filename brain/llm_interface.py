@@ -128,6 +128,8 @@ class LLMInterface:
         options = {
             "temperature": temperature or self.temperature,
             "num_predict": max_tokens or self.max_tokens,
+            "num_ctx": 4096,      # Limit context window for speed
+            "repeat_penalty": 1.1,
         }
 
         try:
@@ -184,6 +186,8 @@ class LLMInterface:
         options = {
             "temperature": temperature or self.temperature,
             "num_predict": max_tokens or self.max_tokens,
+            "num_ctx": 4096,
+            "repeat_penalty": 1.1,
         }
 
         try:

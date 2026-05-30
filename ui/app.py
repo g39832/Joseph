@@ -138,6 +138,11 @@ class JosephApp(ctk.CTk):
         self._custom_commands = None
         self._personality_learning = None
 
+        # Phase 11 services
+        self._spotify = None
+        self._focus_mode = None
+        self._email_triage = None
+
         # Configure customtkinter
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
@@ -174,7 +179,7 @@ class JosephApp(ctk.CTk):
 
         # Hotkeys
         self.bind("<F2>", lambda e: self._toggle_voice())
-        self.bind("<Escape>", lambda e: self._input_box.focus())
+        self.bind("<Escape>", self._on_escape_key)
 
         # Grid layout: header row + main row + input row
         self.grid_rowconfigure(1, weight=1)
@@ -284,23 +289,66 @@ class JosephApp(ctk.CTk):
         main.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         main.grid_rowconfigure(0, weight=1)
         main.grid_columnconfigure(0, weight=1)
-        main.grid_columnconfigure(1, minsize=280)
+        main.grid_columnconfigure(1, minsize=260)
 
         self._build_chat_area(main)
         self._build_sidebar(main)
 
     def _build_chat_area(self, parent):
-        """Scrollable chat message area."""
+        """Scrollable chat message area with search bar."""
         chat_container = ctk.CTkFrame(
             parent,
             fg_color=COLORS["bg"],
             corner_radius=0,
         )
         chat_container.grid(row=0, column=0, sticky="nsew")
-        chat_container.grid_rowconfigure(0, weight=1)
+        chat_container.grid_rowconfigure(1, weight=1)
         chat_container.grid_columnconfigure(0, weight=1)
 
-        # Scrollable frame for messages
+        # ── Search bar ───────────────────────────────────────
+        search_bar = ctk.CTkFrame(chat_container, fg_color=COLORS["panel"], height=38, corner_radius=0)
+        search_bar.grid(row=0, column=0, sticky="ew")
+        search_bar.grid_propagate(False)
+        search_bar.grid_columnconfigure(0, weight=1)
+
+        search_row = ctk.CTkFrame(search_bar, fg_color="transparent")
+        search_row.pack(fill="x", padx=12, pady=5)
+        search_row.grid_columnconfigure(0, weight=1)
+
+        self._search_box = ctk.CTkEntry(
+            search_row,
+            placeholder_text="🔍  Search conversations...",
+            font=FONTS["body_sm"],
+            height=28,
+            fg_color=COLORS["input_bg"],
+            border_color=COLORS["border"],
+            border_width=1,
+            text_color=COLORS["text"],
+            placeholder_text_color=COLORS["text_muted"],
+            corner_radius=6,
+        )
+        self._search_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._search_box.bind("<Return>", lambda e: self._do_search())
+
+        ctk.CTkButton(
+            search_row,
+            text="Search",
+            font=FONTS["sidebar"],
+            width=60,
+            height=28,
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._do_search,
+        ).grid(row=0, column=1)
+
+        # Bottom border under search bar
+        ctk.CTkFrame(chat_container, height=1, fg_color=COLORS["border"]).grid(
+            row=0, column=0, sticky="ews", pady=(37, 0)
+        )
+
+        # ── Scrollable messages ──────────────────────────────
         self._chat_scroll = ctk.CTkScrollableFrame(
             chat_container,
             fg_color=COLORS["bg"],
@@ -308,115 +356,97 @@ class JosephApp(ctk.CTk):
             scrollbar_button_hover_color=COLORS["border_light"],
             corner_radius=0,
         )
-        self._chat_scroll.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        self._chat_scroll.grid(row=1, column=0, sticky="nsew")
         self._chat_scroll.grid_columnconfigure(0, weight=1)
 
-        self._message_row = 0  # Track row index for new messages
+        self._message_row = 0
 
     def _build_sidebar(self, parent):
-        """Right sidebar with memory status, session info, and quick actions."""
+        """Right sidebar — clean, minimal, functional."""
         sidebar = ctk.CTkFrame(
             parent,
             fg_color=COLORS["panel"],
             corner_radius=0,
-            width=280,
+            width=260,
         )
         sidebar.grid(row=0, column=1, sticky="nsew")
         sidebar.grid_propagate(False)
         sidebar.grid_columnconfigure(0, weight=1)
         sidebar.grid_rowconfigure(0, weight=1)
 
-        # Separator line on left edge
-        sep = ctk.CTkFrame(sidebar, width=1, fg_color=COLORS["border"])
-        sep.place(x=0, y=0, relheight=1)
+        # Left border
+        ctk.CTkFrame(sidebar, width=1, fg_color=COLORS["border"]).place(
+            x=0, y=0, relheight=1
+        )
 
-        # Scrollable content inside sidebar
-        sidebar_scroll = ctk.CTkScrollableFrame(
+        # Scrollable content
+        scroll = ctk.CTkScrollableFrame(
             sidebar,
             fg_color="transparent",
             scrollbar_button_color=COLORS["scrollbar"],
             scrollbar_button_hover_color=COLORS["border_light"],
             corner_radius=0,
         )
-        sidebar_scroll.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
-        sidebar_scroll.grid_columnconfigure(0, weight=1)
+        scroll.grid(row=0, column=0, sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
 
-        content = ctk.CTkFrame(sidebar_scroll, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=16, pady=12)
+        c = ctk.CTkFrame(scroll, fg_color="transparent")
+        c.pack(fill="both", expand=True, padx=14, pady=10)
 
-        # --- Memory Status Section ---
-        self._add_sidebar_section(content, "M E M O R Y")
+        # ── Status ──────────────────────────────────────────
+        self._add_sidebar_section(c, "STATUS")
+        self._mem_conversation = self._add_sidebar_stat(c, "Messages", "0 / 20")
+        self._mem_memories     = self._add_sidebar_stat(c, "Memories", "0")
+        self._mem_facts        = self._add_sidebar_stat(c, "Facts", "0")
+        self._mem_semantic     = self._add_sidebar_stat(c, "Search", "Active")
+        self._sess_id          = self._add_sidebar_stat(c, "Session", "—")
+        self._sess_model       = self._add_sidebar_stat(c, "Model", settings.OLLAMA_MODEL.split(":")[0])
+        self._sess_started     = self._add_sidebar_stat(c, "Started", datetime.now().strftime("%H:%M"))
 
-        self._mem_conversation = self._add_sidebar_stat(
-            content, "Conversation", "0 / 20 messages"
-        )
-        self._mem_memories = self._add_sidebar_stat(
-            content, "Long-term", "0 memories"
-        )
-        self._mem_facts = self._add_sidebar_stat(
-            content, "Known facts", "0"
-        )
-        self._mem_semantic = self._add_sidebar_stat(
-            content, "Semantic", "Active"
-        )
+        self._add_divider(c)
 
-        self._add_divider(content)
+        # ── Services ─────────────────────────────────────────
+        self._add_sidebar_section(c, "SERVICES")
+        self._svc_weather   = self._add_sidebar_stat(c, "Weather", "—")
+        self._svc_tasks     = self._add_sidebar_stat(c, "Tasks", "—")
+        self._svc_notes     = self._add_sidebar_stat(c, "Notes", "—")
+        self._svc_scheduler = self._add_sidebar_stat(c, "Reminders", "—")
 
-        # --- Session Section ---
-        self._add_sidebar_section(content, "S E S S I O N")
+        self._add_divider(c)
 
-        self._sess_id = self._add_sidebar_stat(content, "ID", "-")
-        self._sess_model = self._add_sidebar_stat(
-            content, "Model", settings.OLLAMA_MODEL
-        )
-        self._sess_started = self._add_sidebar_stat(
-            content, "Started", datetime.now().strftime("%H:%M")
-        )
+        # ── Actions ──────────────────────────────────────────
+        self._add_sidebar_section(c, "ACTIONS")
 
-        self._add_divider(content)
-
-        # --- Quick Actions ---
-        self._add_sidebar_section(content, "Q U I C K  A C T I O N S")
-
-        btn_cfg = dict(
+        btn = dict(
             font=FONTS["sidebar"],
-            height=30,
+            height=28,
             fg_color=COLORS["card"],
             hover_color=COLORS["border_light"],
             text_color=COLORS["text"],
-            corner_radius=6,
+            corner_radius=5,
             anchor="w",
         )
 
-        ctk.CTkButton(content, text="Clear Chat", command=self._cmd_clear, **btn_cfg).pack(fill="x", pady=(4, 2))
-        ctk.CTkButton(content, text="Show Facts", command=self._cmd_show_facts, **btn_cfg).pack(fill="x", pady=2)
-        ctk.CTkButton(content, text="Memory Status", command=self._cmd_memory_status, **btn_cfg).pack(fill="x", pady=2)
-        ctk.CTkButton(content, text="Reminders", command=self._cmd_reminders, **btn_cfg).pack(fill="x", pady=2)
-        ctk.CTkButton(content, text="My Tasks", command=self._cmd_tasks, **btn_cfg).pack(fill="x", pady=2)
-        ctk.CTkButton(content, text="My Notes", command=self._cmd_notes, **btn_cfg).pack(fill="x", pady=2)
+        actions = [
+            ("⌫  Clear Chat",     self._cmd_clear),
+            ("◎  Facts",          self._cmd_show_facts),
+            ("◈  Memory",         self._cmd_memory_status),
+            ("⏰  Reminders",      self._cmd_reminders),
+            ("✓  Tasks",          self._cmd_tasks),
+            ("📝  Notes",          self._cmd_notes),
+        ]
+        for label, cmd in actions:
+            ctk.CTkButton(c, text=label, command=cmd, **btn).pack(fill="x", pady=1)
 
-        self._add_divider(content)
-        self._add_sidebar_section(content, "A G E N T S")
-        self._agent_status = self._add_sidebar_stat(content, "Memory", "Active")
-        self._add_sidebar_stat(content, "Planner", "Active")
-        self._add_sidebar_stat(content, "Tasks", "Ready")
+        self._add_divider(c)
 
-        self._add_divider(content)
-        self._add_sidebar_section(content, "S E R V I C E S")
-        self._svc_weather = self._add_sidebar_stat(content, "Weather", "Loading...")
-        self._svc_tasks = self._add_sidebar_stat(content, "Tasks", "-")
-        self._svc_notes = self._add_sidebar_stat(content, "Notes", "-")
-        self._svc_scheduler = self._add_sidebar_stat(content, "Scheduler", "-")
-
-        self._add_divider(content)
-
-        # Version label at bottom
+        # ── Version ──────────────────────────────────────────
         ctk.CTkLabel(
-            content,
+            c,
             text="JOSEPH v1.0",
             font=("Segoe UI", 9),
             text_color=COLORS["text_muted"],
-        ).pack(anchor="center", pady=(4, 8))
+        ).pack(anchor="center", pady=(2, 6))
 
     def _build_input_bar(self):
         """Bottom input bar with text field, voice button, and send button."""
@@ -493,10 +523,37 @@ class JosephApp(ctk.CTk):
 
         ctk.CTkLabel(
             hint_row,
-            text="Enter to send  ·  Shift+Enter for newline  ·  / for commands  ·  F2 for voice",
+            text="Enter to send  ·  F2 for voice  ·  / for commands",
             font=("Segoe UI", 9),
             text_color=COLORS["text_muted"],
         ).pack(side="left")
+
+        # Voice speed slider
+        speed_frame = ctk.CTkFrame(hint_row, fg_color="transparent")
+        speed_frame.pack(side="right")
+
+        ctk.CTkLabel(
+            speed_frame,
+            text="Speed",
+            font=("Segoe UI", 9),
+            text_color=COLORS["text_muted"],
+        ).pack(side="left", padx=(0, 4))
+
+        self._speed_slider = ctk.CTkSlider(
+            speed_frame,
+            from_=0.6,
+            to=1.6,
+            number_of_steps=10,
+            width=80,
+            height=14,
+            button_color=COLORS["accent"],
+            button_hover_color=COLORS["accent_hover"],
+            progress_color=COLORS["accent_dim"],
+            fg_color=COLORS["border"],
+            command=self._on_speed_change,
+        )
+        self._speed_slider.set(1.0)
+        self._speed_slider.pack(side="left")
 
         self._voice_state_label = ctk.CTkLabel(
             hint_row,
@@ -504,7 +561,28 @@ class JosephApp(ctk.CTk):
             font=FONTS["body_sm"],
             text_color=COLORS["text_dim"],
         )
-        self._voice_state_label.pack(side="right")
+        # voice_state_label goes between hint and speed
+        self._voice_state_label.pack(side="left", padx=(12, 0))
+
+    def _on_escape_key(self, event) -> None:
+        """Escape: stop speech if speaking, otherwise focus input."""
+        if self._voice and self._voice.tts.is_speaking:
+            self._voice.tts.stop_speaking()
+            self._set_status(f"Connected  {settings.OLLAMA_MODEL}", COLORS["success"])
+        else:
+            self._input_box.focus()
+
+    def _on_speed_change(self, value: float) -> None:
+        """Handle voice speed slider change."""
+        if self._voice and self._voice.tts.is_available:
+            # Kokoro uses speed parameter, pyttsx3 uses rate
+            if self._voice.tts.backend == "kokoro":
+                if hasattr(self._voice.tts._engine, 'voice'):
+                    self._voice.tts._engine.voice = self._voice.tts._engine.voice  # trigger reload
+            else:
+                # pyttsx3: convert 0.6-1.6 to 120-220 wpm
+                wpm = int(120 + (value - 0.6) * 100)
+                self._voice.tts.set_rate(wpm)
 
     def _on_enter_key(self, event):
         """Handle Enter key — send message (Shift+Enter is a newline, ignored here)."""
@@ -516,37 +594,37 @@ class JosephApp(ctk.CTk):
     # ------------------------------------------------------------------ #
 
     def _add_sidebar_section(self, parent, title: str):
-        """Add a section header to the sidebar."""
+        """Add a clean section header."""
         ctk.CTkLabel(
             parent,
             text=title,
-            font=FONTS["sidebar_h"],
+            font=("Segoe UI", 9, "bold"),
             text_color=COLORS["accent"],
-        ).pack(anchor="w", pady=(8, 4))
+        ).pack(anchor="w", pady=(8, 3))
 
     def _add_sidebar_stat(self, parent, label: str, value: str) -> ctk.CTkLabel:
-        """Add a label+value row to the sidebar. Returns the value label."""
+        """Add a label+value row. Returns the value label for updates."""
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", pady=1)
+        row.pack(fill="x", pady=0)
 
         ctk.CTkLabel(
             row,
             text=label,
             font=FONTS["sidebar"],
             text_color=COLORS["text_dim"],
-            width=90,
+            width=80,
             anchor="w",
         ).pack(side="left")
 
-        val_label = ctk.CTkLabel(
+        val = ctk.CTkLabel(
             row,
             text=value,
             font=FONTS["sidebar"],
             text_color=COLORS["text"],
             anchor="w",
         )
-        val_label.pack(side="left", fill="x", expand=True)
-        return val_label
+        val.pack(side="left", fill="x", expand=True)
+        return val
 
     def _add_divider(self, parent):
         """Add a horizontal divider line."""
@@ -583,8 +661,8 @@ class JosephApp(ctk.CTk):
             row=self._message_row,
             column=0,
             sticky="ew",
-            padx=(16, 24) if not is_joseph else (16, 40),
-            pady=(6, 2),
+            padx=(20, 32) if not is_joseph else (20, 48),
+            pady=(4, 1),
         )
         bubble_row.grid_columnconfigure(0, weight=1)
         self._message_row += 1
@@ -650,7 +728,52 @@ class JosephApp(ctk.CTk):
             textbox.insert("end", text)
             textbox.configure(state="disabled")
 
+        # Add rating buttons for Joseph's messages
+        if is_joseph:
+            self._add_rating_buttons(bubble_parent, textbox)
+
         return textbox
+
+    def _add_rating_buttons(self, parent, textbox: ctk.CTkTextbox) -> None:
+        """Add 👍 👎 rating buttons below a Joseph message."""
+        btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+        btn_row.pack(anchor="w", pady=(2, 0))
+
+        def rate(value: int, row=btn_row):
+            """Handle rating click."""
+            if self._personality_learning:
+                self._personality_learning.rate_last_response(value)
+            # Visual feedback — show which was clicked
+            for widget in row.winfo_children():
+                widget.configure(fg_color="transparent")
+            color = COLORS["success"] if value > 0 else COLORS["error"]
+            # Briefly flash the button
+            self.after(100, lambda: None)  # Small delay for feel
+            logger.debug(f"Response rated: {value}")
+
+        ctk.CTkButton(
+            btn_row,
+            text="👍",
+            font=("Segoe UI", 11),
+            width=28, height=22,
+            fg_color="transparent",
+            hover_color=COLORS["card"],
+            text_color=COLORS["text_dim"],
+            corner_radius=4,
+            command=lambda: rate(1),
+        ).pack(side="left", padx=(0, 2))
+
+        ctk.CTkButton(
+            btn_row,
+            text="👎",
+            font=("Segoe UI", 11),
+            width=28, height=22,
+            fg_color="transparent",
+            hover_color=COLORS["card"],
+            text_color=COLORS["text_dim"],
+            corner_radius=4,
+            command=lambda: rate(-1),
+        ).pack(side="left")
 
     def _add_system_message(self, text: str, color: Optional[str] = None, icon: Optional[str] = None):
         """Add a centered system/status message with optional icon."""
@@ -946,6 +1069,14 @@ class JosephApp(ctk.CTk):
 
             self._response_queue.put(("done", None))
 
+            # Self-correction check (background, non-blocking)
+            if full_response and len(full_response.split()) > 3:
+                threading.Thread(
+                    target=self._run_self_correction,
+                    args=(user_text, full_response, messages, system_prompt),
+                    daemon=True,
+                ).start()
+
             # Record interaction for personality learning
             if self._personality_learning and full_response:
                 try:
@@ -1092,8 +1223,8 @@ class JosephApp(ctk.CTk):
         except queue.Empty:
             pass
 
-        # Schedule next poll
-        self.after(30, self._poll_response_queue)
+        # Schedule next poll at 16ms (60fps feel)
+        self.after(16, self._poll_response_queue)
 
     def _finish_response(self, error: bool = False):
         """Called when streaming is complete."""
@@ -1106,9 +1237,11 @@ class JosephApp(ctk.CTk):
 
         # Save to memory
         if self._current_response and not error:
-            from brain.personality import PersonalityEngine
-            pe = PersonalityEngine()
-            formatted = pe.format_response(self._current_response)
+            # Reuse cached personality engine instead of creating new one each time
+            if not hasattr(self, "_pe_cache"):
+                from brain.personality import PersonalityEngine
+                self._pe_cache = PersonalityEngine()
+            formatted = self._pe_cache.format_response(self._current_response)
             self.memory.add_assistant_message(formatted)
 
             # Background fact extraction
@@ -1165,21 +1298,35 @@ class JosephApp(ctk.CTk):
             logger.debug(f"Phase 5 sidebar update error: {e}")
 
     def _update_sidebar(self):
-        """Refresh sidebar stats from current memory state."""
+        """Refresh sidebar stats — only updates labels that changed."""
         try:
             status = self.memory.get_status()
-            self._mem_conversation.configure(
-                text=f"{status['short_term_messages']} / {status['short_term_limit']} messages"
+            # Cache last values to avoid redundant label updates
+            if not hasattr(self, "_sidebar_cache"):
+                self._sidebar_cache = {}
+
+            def _set_if_changed(label, key, value):
+                if self._sidebar_cache.get(key) != value:
+                    label.configure(text=value)
+                    self._sidebar_cache[key] = value
+
+            _set_if_changed(
+                self._mem_conversation, "conv",
+                f"{status['short_term_messages']} / {status['short_term_limit']}"
             )
-            self._mem_memories.configure(
-                text=f"{status['long_term_memories']} memories"
+            _set_if_changed(
+                self._mem_memories, "mem",
+                f"{status['long_term_memories']} memories"
             )
-            self._mem_facts.configure(text=str(status["long_term_facts"]))
-            self._mem_semantic.configure(
-                text="Active" if status["semantic_search"] else "Offline",
-                text_color=COLORS["success"] if status["semantic_search"] else COLORS["error"],
-            )
-            self._sess_id.configure(text=status["session_id"])
+            _set_if_changed(self._mem_facts, "facts", str(status["long_term_facts"]))
+
+            sem_text = "Active" if status["semantic_search"] else "Offline"
+            sem_color = COLORS["success"] if status["semantic_search"] else COLORS["error"]
+            if self._sidebar_cache.get("sem") != sem_text:
+                self._mem_semantic.configure(text=sem_text, text_color=sem_color)
+                self._sidebar_cache["sem"] = sem_text
+
+            _set_if_changed(self._sess_id, "sid", status["session_id"])
         except Exception as e:
             logger.debug(f"Sidebar update error: {e}")
 
@@ -1253,6 +1400,86 @@ class JosephApp(ctk.CTk):
         self._add_system_message(text, COLORS["accent"])
         self._scroll_to_bottom()
 
+    def _do_search(self) -> None:
+        """Execute search from the search bar."""
+        query = self._search_box.get().strip()
+        if not query:
+            return
+        self._search_box.delete(0, "end")
+        self._cmd_search(query)
+
+    def _cmd_search(self, query: str = "") -> None:
+        """Search all conversations and memories."""
+        if not query:
+            self._add_system_message(
+                "Usage: /search <query>  or  type 'search my conversations for X'",
+                COLORS["text_dim"],
+            )
+            self._scroll_to_bottom()
+            return
+
+        if self._conversation_search:
+            results = self._conversation_search.search(query)
+            text = self._conversation_search.format_results(results)
+        else:
+            text = "Search not available."
+        self._add_system_message(text, COLORS["accent"])
+        self._scroll_to_bottom()
+
+    def _cmd_focus(self, duration: int = 25) -> None:
+        """Start a focus session."""
+        if self._focus_mode:
+            result = self._focus_mode.start(duration_minutes=duration)
+            self._add_message_bubble("assistant", result)
+        else:
+            self._add_system_message("Focus mode not ready.", COLORS["text_dim"])
+        self._scroll_to_bottom()
+
+    def _cmd_focus_status(self) -> None:
+        """Show focus session status."""
+        if self._focus_mode:
+            text = self._focus_mode.status()
+            self._add_system_message(text, COLORS["accent"])
+        self._scroll_to_bottom()
+
+    def _cmd_emails(self) -> None:
+        """Show email triage."""
+        def do_triage():
+            if self._email_triage:
+                text = self._email_triage.get_morning_summary()
+            else:
+                text = "Email triage not available. Set up Google integration first."
+            self.after(0, lambda: self._add_system_message(text, COLORS["accent"]))
+            self.after(0, self._scroll_to_bottom)
+
+        import threading
+        threading.Thread(target=do_triage, daemon=True).start()
+
+    def _cmd_spotify(self, action: str = "", query: str = "") -> None:
+        """Control Spotify."""
+        if not self._spotify:
+            self._add_system_message(
+                "Spotify not configured. Add SPOTIFY_CLIENT_ID and "
+                "SPOTIFY_CLIENT_SECRET to .env",
+                COLORS["text_dim"],
+            )
+            self._scroll_to_bottom()
+            return
+
+        if action == "play":
+            result = self._spotify.play(query)
+        elif action == "pause":
+            result = self._spotify.pause()
+        elif action == "next":
+            result = self._spotify.next_track()
+        elif action == "status":
+            result = self._spotify.now_playing()
+        else:
+            result = self._spotify.now_playing()
+
+        self._add_system_message(result, COLORS["accent"])
+        self._scroll_to_bottom()
+
     # ------------------------------------------------------------------ #
     # Session Lifecycle
     # ------------------------------------------------------------------ #
@@ -1279,6 +1506,45 @@ class JosephApp(ctk.CTk):
     # Voice System
     # ------------------------------------------------------------------ #
 
+    def _init_voice(self) -> None:
+        """Initialize the voice system after the UI is ready."""
+        try:
+            from voice.voice_controller import VoiceController, VoiceState
+
+            self._voice = VoiceController(
+                on_text_callback=self._handle_voice_text,
+                on_state_change=self._on_voice_state_change,
+            )
+
+            started = self._voice.start(push_to_talk=False)
+
+            if started:
+                self._voice_enabled = True
+                self._voice_btn.configure(
+                    text_color=COLORS["success"],
+                    fg_color=COLORS["card"],
+                )
+                self._voice_state_label.configure(
+                    text=f"Say '{settings.WAKE_WORD}'...",
+                    text_color=COLORS["text_dim"],
+                )
+                logger.info("Voice system started from UI")
+            else:
+                self._voice_state_label.configure(
+                    text="Voice unavailable - text only",
+                    text_color=COLORS["text_dim"],
+                )
+
+        except Exception as e:
+            logger.warning(f"Voice init failed: {e}")
+            try:
+                self._voice_state_label.configure(
+                    text="Voice unavailable",
+                    text_color=COLORS["text_dim"],
+                )
+            except Exception:
+                pass
+
     def _init_agents(self) -> None:
         """Initialize Phase 4 agents."""
         try:
@@ -1297,8 +1563,7 @@ class JosephApp(ctk.CTk):
             logger.warning(f"Agent init failed: {e}")
 
     def _init_phase5(self) -> None:
-        """Initialize Phase 5 services in background."""
-        import threading
+        """Initialize Phase 5+ services — all in parallel background threads."""
         threading.Thread(target=self._load_phase5_services, daemon=True).start()
 
     def _load_phase5_services(self) -> None:
@@ -1372,6 +1637,46 @@ class JosephApp(ctk.CTk):
 
         except Exception as e:
             logger.warning(f"Service init failed: {e}")
+
+    def _init_phase11(self) -> None:
+        """Initialize Phase 11 — Spotify, Focus Mode, Email Triage."""
+        try:
+            from brain.spotify import SpotifyController
+            from brain.focus_mode import FocusMode
+            from brain.email_triage import EmailTriage
+
+            self._spotify = SpotifyController()
+
+            def on_break(msg: str):
+                if self._voice and self._voice_enabled:
+                    self._voice.tts.speak(msg)
+                self.after(0, lambda: self._add_message_bubble("assistant", msg))
+                self.after(0, self._scroll_to_bottom)
+                if self._notifications:
+                    self._notifications.send_alert(msg)
+
+            self._focus_mode = FocusMode(
+                on_break=on_break,
+                scheduler=self._scheduler,
+                spotify=self._spotify,
+                browser=self._router.browser if self._router else None,
+            )
+
+            self._email_triage = EmailTriage(
+                google=self._google,
+                llm=self.llm,
+            )
+
+            # Add Spotify and focus to tool dispatcher
+            if self._tool_dispatcher:
+                self._tool_dispatcher.spotify = self._spotify
+                self._tool_dispatcher.focus_mode = self._focus_mode
+                self._tool_dispatcher.email_triage = self._email_triage
+
+            logger.info("Phase 11 initialized — Spotify, Focus Mode, Email Triage")
+
+        except Exception as e:
+            logger.warning(f"Phase 11 init failed: {e}")
 
     def _init_phase10(self) -> None:
         """Initialize Phase 10 — Clipboard Monitor, Custom Commands, Personality Learning."""
@@ -1470,6 +1775,9 @@ class JosephApp(ctk.CTk):
 
             # Phase 10 — Clipboard, Custom Commands, Personality Learning
             self._init_phase10()
+
+            # Phase 11 — Spotify, Focus Mode, Email Triage
+            self._init_phase11()
 
             logger.info("Phase 9 services initialized")
 
@@ -1596,24 +1904,22 @@ class JosephApp(ctk.CTk):
     def _handle_voice_text(self, text: str) -> str:
         """
         Called by VoiceController with transcribed speech.
-        Checks automation first, then falls back to LLM.
+        Checks automation first, then streams LLM response to TTS.
         """
         logger.info(f"Voice input: '{text}'")
-
-        # Show user message in UI
         self._response_queue.put(("voice_input", text))
-
-        # Add to memory
         self.memory.add_user_message(text)
 
-        # Try automation first (open YouTube, open Notepad, etc.)
+        # Try automation first
         automation_result = self._try_automation(text)
         if automation_result:
             self.memory.add_assistant_message(automation_result)
             self._response_queue.put(("voice_response", automation_result))
+            if self._voice:
+                self._voice.tts.speak(automation_result)
             return automation_result
 
-        # Regular chat - get LLM response
+        # Stream LLM response — speak sentences as they arrive
         try:
             from brain.prompts import get_system_prompt
 
@@ -1624,13 +1930,43 @@ class JosephApp(ctk.CTk):
             )
             messages = self.memory.get_conversation_history()
 
-            response = self.llm.chat(
+            # Get the stream iterator
+            stream = self.llm.chat_stream(
                 messages=messages,
                 system_prompt=system_prompt,
             )
 
-            if response:
-                formatted = self.personality.format_response(response)
+            full_response = ""
+            display_buffer = ""
+
+            # Stream TTS sentence by sentence while collecting full response
+            import re
+            sentence_end = re.compile(r'(?<=[.!?])\s+')
+            tts_buffer = ""
+
+            for chunk in stream:
+                full_response += chunk
+                display_buffer += chunk
+                tts_buffer += chunk
+
+                # Speak complete sentences immediately
+                parts = sentence_end.split(tts_buffer)
+                if len(parts) > 1:
+                    for sentence in parts[:-1]:
+                        sentence = sentence.strip()
+                        if sentence and len(sentence) > 3 and self._voice:
+                            self._voice.tts.speak(sentence)
+                    tts_buffer = parts[-1]
+
+            # Speak any remaining text
+            if tts_buffer.strip() and self._voice:
+                self._voice.tts.speak(tts_buffer.strip())
+
+            if full_response:
+                if not hasattr(self, "_pe_cache"):
+                    from brain.personality import PersonalityEngine
+                    self._pe_cache = PersonalityEngine()
+                formatted = self._pe_cache.format_response(full_response)
                 self.memory.add_assistant_message(formatted)
                 self._response_queue.put(("voice_response", formatted))
                 return formatted
@@ -1639,6 +1975,8 @@ class JosephApp(ctk.CTk):
             logger.error(f"Voice LLM error: {e}")
             error_msg = "Sorry, something went wrong."
             self._response_queue.put(("voice_response", error_msg))
+            if self._voice:
+                self._voice.tts.speak(error_msg)
             return error_msg
 
         return ""

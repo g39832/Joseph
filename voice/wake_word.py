@@ -65,7 +65,23 @@ class WakeWordDetector:
         self._thread: Optional[threading.Thread] = None
         self._last_detection = 0.0
         self._audio_buffer = np.array([], dtype=np.float32)
+        self._fingerprint = None
+        self._load_fingerprint()
         self._load_model()
+
+    def _load_fingerprint(self) -> None:
+        """Load voice fingerprint if available."""
+        try:
+            from voice.voice_fingerprint import load_fingerprint
+            self._fingerprint = load_fingerprint()
+            if self._fingerprint:
+                logger.info(
+                    f"Voice fingerprint loaded "
+                    f"({self._fingerprint['n_samples']} samples, "
+                    f"threshold={self._fingerprint['threshold']:.2f})"
+                )
+        except Exception as e:
+            logger.debug(f"Fingerprint load error: {e}")
 
     def _load_model(self) -> None:
         """Load the openWakeWord model, downloading if needed."""
@@ -166,22 +182,26 @@ class WakeWordDetector:
     def _process_chunk(self, chunk: np.ndarray) -> None:
         """
         Process a single audio chunk through the wake word model.
-
-        Args:
-            chunk: Audio samples (OWW_CHUNK_SIZE samples at 16kHz)
+        Uses voice fingerprint verification if available.
         """
         try:
-            # Convert to int16 for openWakeWord
             chunk_int16 = (chunk * 32767).astype(np.int16)
-
-            # Run prediction
             prediction = self._model.predict(chunk_int16)
 
-            # Check all models for detection
             for model_name, score in prediction.items():
                 if score >= DETECTION_THRESHOLD:
                     now = time.time()
                     if now - self._last_detection >= COOLDOWN_SECONDS:
+                        # Optional: verify with voice fingerprint
+                        if self._fingerprint:
+                            is_match, confidence = self._verify_fingerprint(chunk)
+                            if not is_match:
+                                logger.debug(
+                                    f"Wake word rejected by fingerprint "
+                                    f"(confidence={confidence:.2f})"
+                                )
+                                continue
+
                         self._last_detection = now
                         logger.info(
                             f"Wake word detected! "
@@ -192,6 +212,14 @@ class WakeWordDetector:
 
         except Exception as e:
             logger.debug(f"Chunk processing error: {e}")
+
+    def _verify_fingerprint(self, audio: np.ndarray) -> tuple[bool, float]:
+        """Verify audio against stored voice fingerprint."""
+        try:
+            from voice.voice_fingerprint import match_audio
+            return match_audio(audio, self._fingerprint)
+        except Exception:
+            return True, 1.0  # If verification fails, allow through
 
     def _on_detected(self) -> None:
         """Called when wake word is detected."""

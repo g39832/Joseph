@@ -209,10 +209,9 @@ class VoiceController:
         try:
             logger.info("Recording user speech — speak now...")
 
-            # Record until silence — uses calibrated threshold
             audio = self.audio.record_until_silence(
                 max_seconds=15.0,
-                silence_duration=1.8,   # Wait 1.8s of silence before stopping
+                silence_duration=1.8,
             )
 
             if audio is None:
@@ -223,7 +222,6 @@ class VoiceController:
             duration = len(audio) / 16000
             logger.info(f"Recorded {duration:.1f}s of audio — transcribing...")
 
-            # Transcribe
             self._set_state(VoiceState.PROCESSING)
             text = self.stt.transcribe(audio)
 
@@ -233,6 +231,13 @@ class VoiceController:
                 return
 
             logger.info(f"Transcribed: '{text}'")
+
+            # Check for interrupt commands FIRST
+            if self._is_interrupt_command(text):
+                logger.info("Interrupt command detected — stopping speech")
+                self.tts.stop_speaking()
+                self._return_to_idle()
+                return
 
             # Send to callback (LLM)
             if self.on_text_callback:
@@ -249,6 +254,15 @@ class VoiceController:
         except Exception as e:
             logger.error(f"Record and process error: {e}")
             self._return_to_idle()
+
+    def _is_interrupt_command(self, text: str) -> bool:
+        """Check if the transcribed text is an interrupt/stop command."""
+        interrupt_phrases = {
+            "stop", "stop it", "shut up", "quiet", "silence",
+            "enough", "cancel", "nevermind", "never mind",
+            "be quiet", "stop talking", "that's enough",
+        }
+        return text.lower().strip().rstrip(".,!") in interrupt_phrases
 
     def _return_to_idle(self) -> None:
         """Return to idle state (listening for wake word)."""
