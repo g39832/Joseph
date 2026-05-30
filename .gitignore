@@ -1,0 +1,69 @@
+# ============================================================
+# JOSEPH AI Assistant — .gitignore
+# ============================================================
+
+# Virtual environment — NEVER commit this
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Data directories — local only, not for git
+data/
+logs/
+exports/
+
+# Model files — too large for git
+*.onnx
+*.bin
+*.pkl
+*.pt
+*.pth
+kokoro-v1.0.onnx
+voices-v1.0.bin
+
+# Secrets — NEVER commit
+.env
+configs/google_credentials.json
+configs/google_token.json
+configs/spotify_token.json
+
+# Backups
+backups/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Playwright browsers (large)
+playwright-browsers/
