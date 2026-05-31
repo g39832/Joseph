@@ -23,11 +23,18 @@ import json
 import os
 import queue
 import asyncio
+import re
 import threading
 import time
 import webbrowser
 from datetime import datetime
 from typing import Optional
+
+from ui.phase5 import Phase5Integration
+from ui.phase6 import Phase6Integration
+from ui.phase7 import Phase7Integration
+from ui.phase8 import Phase8Integration
+from ui.phase9 import Phase9Integration
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 from tkinter import ttk
@@ -49,28 +56,27 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 # Color Palette
 # ------------------------------------------------------------------ #
-COLORS = {
-    "bg":           "#141414",
-    "panel":        "#1e1e1e",
-    "card":         "#252525",
-    "card_user":    "#2c2c2c",
-    "card_hover":   "#2f2f2f",
-    "border":       "#333333",
-    "border_light": "#404040",
-    "accent":       "#4d9de0",
-    "accent_hover": "#3d8dd0",
-    "accent_dim":   "#2a5a8a",
-    "text":         "#ececec",
-    "text_dim":     "#7a7a7a",
-    "text_muted":   "#555555",
-    "text_joseph":  "#4d9de0",
-    "text_user":    "#d0d0d0",
-    "success":      "#3dba7a",
-    "error":        "#d95f5f",
-    "warning":      "#d4924a",
-    "input_bg":     "#1a1a1a",
-    "scrollbar":    "#333333",
-    "thinking":     "#8b5cf6",
+THEMES = {
+    "dark": {
+        "bg": "#141414", "panel": "#1e1e1e", "card": "#252525",
+        "card_hover": "#2f2f2f", "card_user": "#2c2c2c",
+        "border": "#333333", "border_light": "#404040",
+        "accent": "#4d9de0", "accent_hover": "#3d8dd0", "accent_dim": "#2a5a8a",
+        "text": "#ececec", "text_dim": "#7a7a7a", "text_muted": "#555555",
+        "text_joseph": "#4d9de0", "text_user": "#d0d0d0",
+        "success": "#3dba7a", "error": "#d95f5f", "warning": "#d4924a",
+        "input_bg": "#1a1a1a", "scrollbar": "#333333", "thinking": "#8b5cf6", "sash": "#2a2a2a",
+    },
+    "light": {
+        "bg": "#f5f5f5", "panel": "#ffffff", "card": "#ebebeb",
+        "card_hover": "#e0e0e0", "card_user": "#e3f2fd",
+        "border": "#d0d0d0", "border_light": "#bfbfbf",
+        "accent": "#1976d2", "accent_hover": "#1565c0", "accent_dim": "#64b5f6",
+        "text": "#1a1a1a", "text_dim": "#6a6a6a", "text_muted": "#9a9a9a",
+        "text_joseph": "#1976d2", "text_user": "#1a1a1a",
+        "success": "#2e7d32", "error": "#c62828", "warning": "#e65100",
+        "input_bg": "#ffffff", "scrollbar": "#cccccc", "thinking": "#7c4dff", "sash": "#cccccc",
+    },
 }
 
 FONTS = {
@@ -97,13 +103,34 @@ class JosephApp(ctk.CTk):
     Results are passed back via a thread-safe queue.
     """
 
-    def __init__(self, llm, memory, personality, hyper_engine=None):
+    def __init__(
+        self, llm, memory, personality,
+        hyper_engine=None, router=None,
+        activity_tracker=None, project_awareness=None,
+        insight_engine=None, research_workspace=None,
+        followup_engine=None, ambient_intel=None,
+        workspace_manager=None, project_commander=None,
+        roadmap_engine=None, weekly_review=None,
+        briefing_v2=None, project_memory=None,
+        research_pipeline=None, learning_companion=None,
+        decision_history=None, continuity_engine=None,
+        consolidation_engine=None,
+        document_intelligence=None, vision_engine=None,
+        paper_analyzer=None, screen_awareness=None,
+        code_vision=None, diagram_analyzer=None,
+        multimodal_memory=None,
+        background_research=None,
+        cognitive_router=None,
+        memory_relevance=None,
+        smart_cache=None,
+    ):
         super().__init__()
 
         self.llm = llm
         self.memory = memory
         self.personality = personality
         self._hyper = hyper_engine
+        self._phase6_router = router
 
         # Thread-safe queue for streaming chunks from background thread
         self._response_queue: queue.Queue = queue.Queue()
@@ -136,6 +163,48 @@ class JosephApp(ctk.CTk):
         self._advanced_personality = None
         self._autonomous_agent = None
 
+        # Phase 7 (new): capability enhancement engines
+        self._activity_tracker = activity_tracker
+        self._project_awareness = project_awareness
+        self._insight_engine = insight_engine
+        self._research_workspace = research_workspace
+        self._followup_engine = followup_engine
+        self._ambient_intel = ambient_intel
+        if self._ambient_intel and self._activity_tracker:
+            self._ambient_intel.set_tracker(self._activity_tracker)
+        self._project_context_cache = ""
+        self._last_user_text = ""
+        self._last_followups = []
+
+        # Phase 8: Personal Operating System
+        self._workspace_manager = workspace_manager
+        self._project_commander = project_commander
+        self._roadmap_engine = roadmap_engine
+        self._weekly_review = weekly_review
+        self._briefing_v2 = briefing_v2
+        self._project_memory = project_memory
+        self._research_pipeline = research_pipeline
+        self._learning_companion = learning_companion
+        self._decision_history = decision_history
+        self._continuity_engine = continuity_engine
+        self._consolidation_engine = consolidation_engine
+        self._project_store = None  # set lazily by Phase 5
+
+        # Phase 9: Vision, Document Intelligence, Computer Awareness
+        self._document_intelligence = document_intelligence
+        self._vision_engine = vision_engine
+        self._paper_analyzer = paper_analyzer
+        self._screen_awareness = screen_awareness
+        self._code_vision = code_vision
+        self._diagram_analyzer = diagram_analyzer
+        self._multimodal_memory = multimodal_memory
+        self._background_research = background_research
+
+        # Phase X: Cognitive Architecture
+        self._cognitive_router = cognitive_router
+        self._memory_relevance = memory_relevance
+        self._smart_cache = smart_cache
+
         # Phase 8 services
         self._google = None
         self._hotkey_daemon = None
@@ -150,10 +219,11 @@ class JosephApp(ctk.CTk):
         self._conversation_search = None
         self._hyper_turn_packet: dict = {}
         self._pending_attachments: list[dict] = []
+        self._llm_busy = threading.Event()
         self._ui_settings = {
             "hyper_enabled": bool(hyper_engine),
             "research_sources": 3,
-            "refresh_interval_ms": 2500,
+            "refresh_interval_ms": 15000,
             "density": "comfortable",
             "animations": True,
             "compact_panels": False,
@@ -174,9 +244,15 @@ class JosephApp(ctk.CTk):
         self._context_visible = self._layout_state.get("context_visible", True)
         self._nav_width = int(self._layout_state.get("nav_width", 232))
         self._context_width = int(self._layout_state.get("context_width", 320))
-        self._theme_mode = self._layout_state.get("theme_mode", "dark")
+        self._theme_mode = self._normalize_theme_mode(self._layout_state.get("theme_mode", "dark"))
         self._layout_density = self._layout_state.get("density", "comfortable")
         self._font_scale = float(self._layout_state.get("font_scale", 1.0))
+        mode_key = self._theme_mode if self._theme_mode in THEMES else "dark"
+        self.colors = dict(THEMES[mode_key])
+        self._graph_pan_offset_x = 0
+        self._graph_pan_offset_y = 0
+        self._graph_pan_start_pos = None
+        self._graph_drag_start = None
 
         # Phase 10 services
         self._clipboard_monitor = None
@@ -193,12 +269,42 @@ class JosephApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
         self._ttk_style = ttk.Style()
         try:
-            self._ttk_style.configure("Responsive.TPanedwindow", background=COLORS["bg"])
+            self._ttk_style.configure("Responsive.TPanedwindow", background=self.colors["bg"])
         except Exception:
             pass
 
         self._setup_window()
         self._build_ui()
+        # Phase 5: Engineering Assistant, Tools Framework, Project Manager
+        try:
+            Phase5Integration.hook_into(self)
+        except Exception as e:
+            logger.warning(f"Phase 5 integration skipped: {e}")
+
+        # Phase 6: Assistant Router + Explainability Panel
+        try:
+            Phase6Integration.hook_into(self)
+        except Exception as e:
+            logger.warning(f"Phase 6 integration skipped: {e}")
+
+        # Phase 7: Activity Timeline, Insights, Research, Suggestions
+        try:
+            Phase7Integration.hook_into(self)
+        except Exception as e:
+            logger.warning(f"Phase 7 integration skipped: {e}")
+
+        # Phase 8: Personal Operating System
+        try:
+            Phase8Integration.hook_into(self)
+        except Exception as e:
+            logger.warning(f"Phase 8 integration skipped: {e}")
+
+        # Phase 9: Vision, Document Intelligence, Computer Awareness
+        try:
+            Phase9Integration.hook_into(self)
+        except Exception as e:
+            logger.warning(f"Phase 9 integration skipped: {e}")
+
         self._start_session()
 
         # Start polling the response queue
@@ -216,7 +322,7 @@ class JosephApp(ctk.CTk):
         self.title("JOSEPH - Personal AI Assistant")
         self.geometry("1360x820")
         self.minsize(980, 660)
-        self.configure(fg_color=COLORS["bg"])
+        self.configure(fg_color=self.colors["bg"])
 
         # Center on screen
         self.update_idletasks()
@@ -283,7 +389,7 @@ class JosephApp(ctk.CTk):
         header = ctk.CTkFrame(
             self,
             height=52,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=0,
         )
         header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
@@ -291,7 +397,7 @@ class JosephApp(ctk.CTk):
         header.grid_propagate(False)
 
         # Thin accent line at bottom of header
-        accent_line = ctk.CTkFrame(header, height=1, fg_color=COLORS["accent"])
+        accent_line = ctk.CTkFrame(header, height=1, fg_color=self.colors["accent"])
         accent_line.place(relx=0, rely=1.0, anchor="sw", relwidth=1.0)
 
         # Left: Logo + name
@@ -302,21 +408,21 @@ class JosephApp(ctk.CTk):
             logo_frame,
             text="◈",
             font=("Segoe UI", 18),
-            text_color=COLORS["accent"],
+            text_color=self.colors["accent"],
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkLabel(
             logo_frame,
             text="JOSEPH",
             font=FONTS["title"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
         ).pack(side="left")
 
         ctk.CTkLabel(
             logo_frame,
             text="Personal AI Assistant",
             font=FONTS["subtitle"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         ).pack(side="left", padx=(10, 0))
 
         self._layout_actions_frame = ctk.CTkFrame(header, fg_color="transparent")
@@ -328,9 +434,9 @@ class JosephApp(ctk.CTk):
             width=76,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._toggle_navigation_panel,
         )
@@ -342,9 +448,9 @@ class JosephApp(ctk.CTk):
             width=76,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._toggle_context_panel,
         )
@@ -356,9 +462,9 @@ class JosephApp(ctk.CTk):
             width=58,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._reset_panel_widths,
         )
@@ -373,7 +479,7 @@ class JosephApp(ctk.CTk):
             self._status_frame,
             text=datetime.now().strftime("%H:%M"),
             font=("Segoe UI", 13, "bold"),
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         )
         self._clock_label.pack(side="right", padx=(16, 0))
         self._update_clock()
@@ -383,7 +489,7 @@ class JosephApp(ctk.CTk):
             self._status_frame,
             text=f"Connected  {settings.OLLAMA_MODEL}",
             font=FONTS["body_sm"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         )
         self._status_label.pack(side="right", padx=(0, 6))
 
@@ -392,7 +498,7 @@ class JosephApp(ctk.CTk):
             self._status_frame,
             text="●",
             font=("Segoe UI", 12),
-            text_color=COLORS["success"],
+            text_color=self.colors["success"],
         )
         self._status_dot.pack(side="right", padx=(0, 4))
         self._dot_bright = True
@@ -406,7 +512,7 @@ class JosephApp(ctk.CTk):
     def _pulse_dot(self):
         """Animate the status dot between bright and dim when idle."""
         if not self._is_responding:
-            color = COLORS["success"] if self._dot_bright else "#1e6640"
+            color = self.colors["success"] if self._dot_bright else "#1e6640"
             self._status_dot.configure(text_color=color)
             self._dot_bright = not self._dot_bright
         self.after(1200, self._pulse_dot)
@@ -426,9 +532,9 @@ class JosephApp(ctk.CTk):
         self._main_pane.grid(row=0, column=0, sticky="nsew")
         self._main_pane.bind("<ButtonRelease-1>", lambda _e: self._capture_layout_state())
 
-        self._nav_host = ctk.CTkFrame(main, fg_color=COLORS["panel"], corner_radius=0)
-        self._workspace_host = ctk.CTkFrame(main, fg_color=COLORS["bg"], corner_radius=0)
-        self._context_host = ctk.CTkFrame(main, fg_color=COLORS["panel"], corner_radius=0)
+        self._nav_host = ctk.CTkFrame(main, fg_color=self.colors["panel"], corner_radius=0)
+        self._workspace_host = ctk.CTkFrame(main, fg_color=self.colors["bg"], corner_radius=0)
+        self._context_host = ctk.CTkFrame(main, fg_color=self.colors["panel"], corner_radius=0)
 
         self._main_pane.add(self._nav_host, weight=0)
         self._main_pane.add(self._workspace_host, weight=1)
@@ -459,7 +565,7 @@ class JosephApp(ctk.CTk):
             header,
             text="Command Center",
             font=FONTS["title"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
         ).grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
             header,
@@ -467,9 +573,9 @@ class JosephApp(ctk.CTk):
             width=56,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._toggle_navigation_panel,
         ).grid(row=0, column=1, sticky="e")
@@ -477,8 +583,8 @@ class JosephApp(ctk.CTk):
         self._nav_buttons_frame = ctk.CTkScrollableFrame(
             parent,
             fg_color="transparent",
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=0,
         )
         self._nav_buttons_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 8))
@@ -488,7 +594,7 @@ class JosephApp(ctk.CTk):
             self._nav_panel,
             text="Ready",
             font=FONTS["sidebar"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         )
         self._nav_status_label.grid(row=2, column=0, sticky="w", padx=14, pady=(0, 12))
 
@@ -508,9 +614,9 @@ class JosephApp(ctk.CTk):
                 text=page,
                 height=34,
                 font=FONTS["sidebar"],
-                fg_color=COLORS["card"],
-                hover_color=COLORS["border_light"],
-                text_color=COLORS["text"],
+                fg_color=self.colors["card"],
+                hover_color=self.colors["border_light"],
+                text_color=self.colors["text"],
                 corner_radius=8,
                 anchor="w",
                 command=lambda p=page: self._show_page(p),
@@ -523,7 +629,7 @@ class JosephApp(ctk.CTk):
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_columnconfigure(0, weight=1)
 
-        self._workspace_stack = ctk.CTkFrame(parent, fg_color=COLORS["bg"], corner_radius=0)
+        self._workspace_stack = ctk.CTkFrame(parent, fg_color=self.colors["bg"], corner_radius=0)
         self._workspace_stack.grid(row=0, column=0, sticky="nsew")
         self._workspace_stack.grid_rowconfigure(0, weight=1)
         self._workspace_stack.grid_columnconfigure(0, weight=1)
@@ -538,7 +644,7 @@ class JosephApp(ctk.CTk):
             "Improvements",
             "Settings",
         ]:
-            frame = ctk.CTkFrame(self._workspace_stack, fg_color=COLORS["bg"], corner_radius=0)
+            frame = ctk.CTkFrame(self._workspace_stack, fg_color=self.colors["bg"], corner_radius=0)
             frame.grid(row=0, column=0, sticky="nsew")
             frame.grid_rowconfigure(0, weight=1)
             frame.grid_columnconfigure(0, weight=1)
@@ -570,7 +676,7 @@ class JosephApp(ctk.CTk):
             header,
             text="Context",
             font=FONTS["title"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
         ).grid(row=0, column=0, sticky="w")
 
         btn_row = ctk.CTkFrame(header, fg_color="transparent")
@@ -581,9 +687,9 @@ class JosephApp(ctk.CTk):
             width=56,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._toggle_context_panel,
         ).pack(side="left", padx=(0, 6))
@@ -593,9 +699,9 @@ class JosephApp(ctk.CTk):
             width=56,
             height=26,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._reset_panel_widths,
         ).pack(side="left")
@@ -603,8 +709,8 @@ class JosephApp(ctk.CTk):
         self._context_stack = ctk.CTkScrollableFrame(
             self._context_panel,
             fg_color="transparent",
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=0,
         )
         self._context_stack.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 8))
@@ -621,20 +727,20 @@ class JosephApp(ctk.CTk):
         for title, key in context_specs:
             card = ctk.CTkFrame(
                 self._context_stack,
-                fg_color=COLORS["panel"],
+                fg_color=self.colors["panel"],
                 corner_radius=12,
                 border_width=1,
-                border_color=COLORS["border"],
+                border_color=self.colors["border"],
             )
             card.pack(fill="x", pady=6)
-            ctk.CTkLabel(card, text=title, font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+            ctk.CTkLabel(card, text=title, font=FONTS["name"], text_color=self.colors["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
             box = ctk.CTkTextbox(
                 card,
                 height=120 if key != "turn" else 150,
                 font=FONTS["body_sm"],
-                fg_color=COLORS["input_bg"],
-                text_color=COLORS["text"],
-                border_color=COLORS["border"],
+                fg_color=self.colors["input_bg"],
+                text_color=self.colors["text"],
+                border_color=self.colors["border"],
                 border_width=1,
                 corner_radius=8,
                 wrap="word",
@@ -654,6 +760,7 @@ class JosephApp(ctk.CTk):
             self._theme_mode = self._layout_state.get("theme_mode", self._theme_mode)
             self._theme_mode = self._normalize_theme_mode(self._theme_mode)
             ctk.set_appearance_mode(self._theme_mode)
+            self._apply_theme()
         except Exception:
             pass
 
@@ -744,6 +851,37 @@ class JosephApp(ctk.CTk):
             return value
         return "dark"
 
+
+    def _apply_theme(self):
+        """Apply current theme to all runtime colors."""
+        self.colors.update(THEMES[self._theme_mode])
+        self.configure(fg_color=self.colors["bg"])
+        self._apply_theme_to_widgets()
+
+    def _apply_theme_to_widgets(self):
+        """Propagate theme to existing widgets."""
+        try:
+            for f in self._page_frames.values():
+                try:
+                    f.configure(fg_color=self.colors["bg"])
+                except Exception:
+                    pass
+            if self._chat_scroll:
+                self._chat_scroll.configure(fg_color=self.colors["bg"])
+            for d in [self._context_cards, self._dashboard_boxes, self._diagnostics_boxes]:
+                for box in d.values():
+                    try:
+                        box.configure(fg_color=self.colors["input_bg"], text_color=self.colors["text"], border_color=self.colors["border"])
+                    except Exception:
+                        pass
+            if hasattr(self, "_research_progress_frame"):
+                self._research_progress_frame.configure(fg_color=self.colors["panel"])
+                self._research_progress_bar.configure(fg_color=self.colors["border"])
+            self._refresh_context_panel()
+            self._update_sidebar()
+        except Exception:
+            pass
+
     def _sync_panel_controls(self):
         """Keep header controls aligned with panel visibility."""
         try:
@@ -789,8 +927,8 @@ class JosephApp(ctk.CTk):
         for name, button in self._nav_buttons.items():
             try:
                 button.configure(
-                    fg_color=COLORS["accent"] if name == page else COLORS["card"],
-                    text_color="#ffffff" if name == page else COLORS["text"],
+                    fg_color=self.colors["accent"] if name == page else self.colors["card"],
+                    text_color="#ffffff" if name == page else self.colors["text"],
                 )
             except Exception:
                 pass
@@ -870,7 +1008,7 @@ class JosephApp(ctk.CTk):
         """Scrollable chat message area with search bar."""
         chat_container = ctk.CTkFrame(
             parent,
-            fg_color=COLORS["bg"],
+            fg_color=self.colors["bg"],
             corner_radius=0,
         )
         chat_container.grid(row=0, column=0, sticky="nsew")
@@ -878,7 +1016,7 @@ class JosephApp(ctk.CTk):
         chat_container.grid_columnconfigure(0, weight=1)
 
         # ── Search bar ───────────────────────────────────────
-        search_bar = ctk.CTkFrame(chat_container, fg_color=COLORS["panel"], height=38, corner_radius=0)
+        search_bar = ctk.CTkFrame(chat_container, fg_color=self.colors["panel"], height=38, corner_radius=0)
         search_bar.grid(row=0, column=0, sticky="ew")
         search_bar.grid_propagate(False)
         search_bar.grid_columnconfigure(0, weight=1)
@@ -892,11 +1030,11 @@ class JosephApp(ctk.CTk):
             placeholder_text="🔍  Search conversations...",
             font=FONTS["body_sm"],
             height=28,
-            fg_color=COLORS["input_bg"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            border_color=self.colors["border"],
             border_width=1,
-            text_color=COLORS["text"],
-            placeholder_text_color=COLORS["text_muted"],
+            text_color=self.colors["text"],
+            placeholder_text_color=self.colors["text_muted"],
             corner_radius=6,
         )
         self._search_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
@@ -908,25 +1046,25 @@ class JosephApp(ctk.CTk):
             font=FONTS["sidebar"],
             width=60,
             height=28,
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._do_search,
         ).grid(row=0, column=1)
 
         # Bottom border under search bar
-        ctk.CTkFrame(chat_container, height=1, fg_color=COLORS["border"]).grid(
+        ctk.CTkFrame(chat_container, height=1, fg_color=self.colors["border"]).grid(
             row=0, column=0, sticky="ews", pady=(37, 0)
         )
 
         # ── Scrollable messages ──────────────────────────────
         panel = ctk.CTkFrame(
             chat_container,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=10,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         panel.grid(row=1, column=0, sticky="ew", padx=14, pady=(10, 8))
         panel.grid_columnconfigure(0, weight=1)
@@ -939,7 +1077,7 @@ class JosephApp(ctk.CTk):
             tool_row,
             text="Command Center",
             font=FONTS["name"],
-            text_color=COLORS["accent"],
+            text_color=self.colors["accent"],
         ).pack(side="left")
 
         self._turn_detail_toggle = ctk.CTkButton(
@@ -948,9 +1086,9 @@ class JosephApp(ctk.CTk):
             width=84,
             height=24,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._toggle_turn_details,
         )
@@ -962,9 +1100,9 @@ class JosephApp(ctk.CTk):
             width=60,
             height=24,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._attach_files,
         ).pack(side="right", padx=(6, 0))
@@ -975,9 +1113,9 @@ class JosephApp(ctk.CTk):
             width=58,
             height=24,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._attach_image,
         ).pack(side="right", padx=(6, 0))
@@ -988,9 +1126,9 @@ class JosephApp(ctk.CTk):
             width=60,
             height=24,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._export_conversation,
         ).pack(side="right", padx=(6, 0))
@@ -1009,9 +1147,9 @@ class JosephApp(ctk.CTk):
             panel,
             height=82,
             font=FONTS["body_sm"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            text_color=self.colors["text"],
+            border_color=self.colors["border"],
             border_width=1,
             corner_radius=8,
             wrap="word",
@@ -1022,13 +1160,47 @@ class JosephApp(ctk.CTk):
 
         self._chat_scroll = ctk.CTkScrollableFrame(
             chat_container,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=0,
         )
         self._chat_scroll.grid(row=2, column=0, sticky="nsew")
         self._chat_scroll.grid_columnconfigure(0, weight=1)
+
+        # ── Research progress bar (hidden by default) ──────────
+        self._research_progress_frame = ctk.CTkFrame(
+            chat_container,
+            fg_color=self.colors["panel"],
+            height=32,
+            corner_radius=0,
+        )
+        self._research_progress_frame.grid(row=3, column=0, sticky="ew")
+        self._research_progress_frame.grid_columnconfigure(0, weight=1)
+        self._research_progress_frame.grid_propagate(False)
+
+        self._research_progress_label = ctk.CTkLabel(
+            self._research_progress_frame,
+            text="",
+            font=("Segoe UI", 10),
+            text_color=self.colors["accent"],
+            anchor="w",
+        )
+        self._research_progress_label.grid(row=0, column=0, sticky="w", padx=(14, 4), pady=0)
+
+        self._research_progress_bar = ctk.CTkProgressBar(
+            self._research_progress_frame,
+            width=120,
+            height=10,
+            fg_color=self.colors["border"],
+            progress_color=self.colors["accent"],
+            corner_radius=4,
+            mode="determinate",
+        )
+        self._research_progress_bar.grid(row=0, column=1, sticky="e", padx=(4, 14), pady=0)
+        self._research_progress_bar.set(0)
+
+        self._research_progress_frame.grid_remove()
 
         self._message_row = 0
 
@@ -1036,7 +1208,7 @@ class JosephApp(ctk.CTk):
         """Right sidebar — clean, minimal, functional."""
         sidebar = ctk.CTkFrame(
             parent,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=0,
             width=260,
         )
@@ -1046,7 +1218,7 @@ class JosephApp(ctk.CTk):
         sidebar.grid_rowconfigure(0, weight=1)
 
         # Left border
-        ctk.CTkFrame(sidebar, width=1, fg_color=COLORS["border"]).place(
+        ctk.CTkFrame(sidebar, width=1, fg_color=self.colors["border"]).place(
             x=0, y=0, relheight=1
         )
 
@@ -1054,8 +1226,8 @@ class JosephApp(ctk.CTk):
         scroll = ctk.CTkScrollableFrame(
             sidebar,
             fg_color="transparent",
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=0,
         )
         scroll.grid(row=0, column=0, sticky="nsew")
@@ -1091,9 +1263,9 @@ class JosephApp(ctk.CTk):
         btn = dict(
             font=FONTS["sidebar"],
             height=28,
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             anchor="w",
         )
@@ -1116,7 +1288,7 @@ class JosephApp(ctk.CTk):
             c,
             text="JOSEPH v1.0",
             font=("Segoe UI", 9),
-            text_color=COLORS["text_muted"],
+            text_color=self.colors["text_muted"],
         ).pack(anchor="center", pady=(2, 6))
 
     def _build_input_bar(self):
@@ -1124,7 +1296,7 @@ class JosephApp(ctk.CTk):
         input_bar = ctk.CTkFrame(
             self,
             height=80,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=0,
         )
         input_bar.grid(row=2, column=0, sticky="ew")
@@ -1132,7 +1304,7 @@ class JosephApp(ctk.CTk):
         input_bar.grid_propagate(False)
 
         # Top border line (slightly lighter for subtle gradient feel)
-        border_top = ctk.CTkFrame(input_bar, height=2, fg_color=COLORS["border_light"])
+        border_top = ctk.CTkFrame(input_bar, height=2, fg_color=self.colors["border_light"])
         border_top.pack(fill="x", side="top")
 
         # Input row
@@ -1147,9 +1319,9 @@ class JosephApp(ctk.CTk):
             font=("Segoe UI", 17),
             width=42,
             height=42,
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text_dim"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text_dim"],
             corner_radius=21,
             command=self._toggle_voice,
         )
@@ -1161,11 +1333,11 @@ class JosephApp(ctk.CTk):
             placeholder_text=f"Message {settings.JOSEPH_NAME}...",
             font=FONTS["input"],
             height=46,
-            fg_color=COLORS["input_bg"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            border_color=self.colors["border"],
             border_width=1,
-            text_color=COLORS["text"],
-            placeholder_text_color=COLORS["text_muted"],
+            text_color=self.colors["text"],
+            placeholder_text_color=self.colors["text_muted"],
             corner_radius=12,
         )
         self._input_box.grid(row=0, column=1, sticky="ew", padx=(0, 10))
@@ -1180,8 +1352,8 @@ class JosephApp(ctk.CTk):
             font=FONTS["btn"],
             width=110,
             height=46,
-            fg_color=COLORS["accent"],
-            hover_color=COLORS["accent_hover"],
+            fg_color=self.colors["accent"],
+            hover_color=self.colors["accent_hover"],
             text_color="#ffffff",
             corner_radius=12,
             command=self._send_message,
@@ -1196,7 +1368,7 @@ class JosephApp(ctk.CTk):
             hint_row,
             text="Enter to send  ·  F2 for voice  ·  / for commands",
             font=("Segoe UI", 9),
-            text_color=COLORS["text_muted"],
+            text_color=self.colors["text_muted"],
         ).pack(side="left")
 
         # Voice speed slider
@@ -1207,7 +1379,7 @@ class JosephApp(ctk.CTk):
             speed_frame,
             text="Speed",
             font=("Segoe UI", 9),
-            text_color=COLORS["text_muted"],
+            text_color=self.colors["text_muted"],
         ).pack(side="left", padx=(0, 4))
 
         self._speed_slider = ctk.CTkSlider(
@@ -1217,10 +1389,10 @@ class JosephApp(ctk.CTk):
             number_of_steps=10,
             width=80,
             height=14,
-            button_color=COLORS["accent"],
-            button_hover_color=COLORS["accent_hover"],
-            progress_color=COLORS["accent_dim"],
-            fg_color=COLORS["border"],
+            button_color=self.colors["accent"],
+            button_hover_color=self.colors["accent_hover"],
+            progress_color=self.colors["accent_dim"],
+            fg_color=self.colors["border"],
             command=self._on_speed_change,
         )
         self._speed_slider.set(1.0)
@@ -1230,7 +1402,7 @@ class JosephApp(ctk.CTk):
             hint_row,
             text="",
             font=FONTS["body_sm"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         )
         # voice_state_label goes between hint and speed
         self._voice_state_label.pack(side="left", padx=(12, 0))
@@ -1245,10 +1417,10 @@ class JosephApp(ctk.CTk):
         """Create a compact metric card for tab dashboards."""
         card = ctk.CTkFrame(
             parent,
-            fg_color=COLORS["card"],
+            fg_color=self.colors["card"],
             corner_radius=10,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         card.grid(row=0, column=column, sticky="ew", padx=4)
         card.grid_columnconfigure(0, weight=1)
@@ -1257,13 +1429,13 @@ class JosephApp(ctk.CTk):
             card,
             text=label,
             font=FONTS["sidebar_h"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         ).pack(anchor="w", padx=10, pady=(8, 0))
         value_label = ctk.CTkLabel(
             card,
             text=value,
             font=FONTS["body"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
         )
         value_label.pack(anchor="w", padx=10, pady=(2, 8))
         return value_label
@@ -1298,7 +1470,7 @@ class JosephApp(ctk.CTk):
             self._pending_attachments.append({"type": "file", "path": path})
         self._add_system_message(
             f"Attached {len(paths)} file(s). They will be included with the next message.",
-            COLORS["accent"],
+            self.colors["accent"],
         )
 
     def _attach_image(self):
@@ -1315,7 +1487,7 @@ class JosephApp(ctk.CTk):
         self._pending_attachments.append({"type": "image", "path": path})
         self._add_system_message(
             "Image attached. It will be analyzed if vision is available.",
-            COLORS["accent"],
+            self.colors["accent"],
         )
 
     def _export_conversation(self):
@@ -1344,10 +1516,10 @@ class JosephApp(ctk.CTk):
             json_path.write_text(json.dumps(messages, indent=2, ensure_ascii=False), encoding="utf-8")
             self._add_system_message(
                 f"Conversation exported to {md_path.name} and {json_path.name}",
-                COLORS["success"],
+                self.colors["success"],
             )
         except Exception as e:
-            self._add_system_message(f"Export failed: {e}", COLORS["error"])
+            self._add_system_message(f"Export failed: {e}", self.colors["error"])
 
     def _format_attachment_context(self) -> str:
         """Build prompt context from pending attachments."""
@@ -1437,11 +1609,10 @@ class JosephApp(ctk.CTk):
             details.append("Memory context snapshot:")
             details.append(packet.get("memory_context", "")[:1000])
         self._set_textbox_content(self._turn_detail_box, "\n".join(details).strip())
-        self._refresh_context_panel()
 
     def _schedule_command_center_refresh(self):
         """Refresh the command center at a conservative cadence."""
-        interval = int(self._ui_settings.get("refresh_interval_ms", 2500))
+        interval = int(self._ui_settings.get("refresh_interval_ms", 15000))
         if self._command_center_refresh_job:
             try:
                 self.after_cancel(self._command_center_refresh_job)
@@ -1450,17 +1621,28 @@ class JosephApp(ctk.CTk):
         self._command_center_refresh_job = self.after(interval, self._refresh_command_center)
 
     def _refresh_command_center(self):
-        """Refresh all command-center tabs with current runtime data."""
+        """Refresh command-center tabs. Only heavy-refreshes the visible tab."""
         try:
+            active = self._active_page
+
+            # Always update lightweight panels
             self._update_turn_panel()
             self._refresh_context_panel()
-            self._refresh_dashboard_tab()
-            self._refresh_graph_tab()
-            self._refresh_memory_tab()
-            self._refresh_agents_tab()
-            self._refresh_diagnostics_tab()
-            self._refresh_improvements_tab()
             self._refresh_settings_tab()
+
+            # Only heavy-refresh the visible tab
+            if active == "Dashboard":
+                self._refresh_dashboard_tab()
+            elif active in ("Knowledge Graph", "Graph"):
+                self._refresh_graph_tab()
+            elif active == "Memory":
+                self._refresh_memory_tab()
+            elif active == "Agents":
+                self._refresh_agents_tab()
+            elif active == "Diagnostics":
+                self._refresh_diagnostics_tab()
+            elif active == "Improvements":
+                self._refresh_improvements_tab()
         finally:
             self._schedule_command_center_refresh()
 
@@ -1468,9 +1650,9 @@ class JosephApp(ctk.CTk):
         """Build the main dashboard tab."""
         tab = ctk.CTkScrollableFrame(
             parent,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
         )
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_columnconfigure(0, weight=1)
@@ -1484,7 +1666,7 @@ class JosephApp(ctk.CTk):
             header,
             text="AI Command Center",
             font=FONTS["title"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
         ).pack(side="left")
         ctk.CTkButton(
             header,
@@ -1492,9 +1674,9 @@ class JosephApp(ctk.CTk):
             width=170,
             height=28,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=lambda: webbrowser.open(f"http://{settings.API_HOST}:{settings.API_PORT}/dashboard"),
         ).pack(side="right")
@@ -1508,10 +1690,10 @@ class JosephApp(ctk.CTk):
         for row, (title, key) in enumerate(cards, start=1):
             card = ctk.CTkFrame(
                 tab,
-                fg_color=COLORS["panel"],
+                fg_color=self.colors["panel"],
                 corner_radius=12,
                 border_width=1,
-                border_color=COLORS["border"],
+                border_color=self.colors["border"],
             )
             card.grid(row=row, column=0, sticky="ew", padx=6, pady=6)
             card.grid_columnconfigure(0, weight=1)
@@ -1519,15 +1701,15 @@ class JosephApp(ctk.CTk):
                 card,
                 text=title,
                 font=FONTS["name"],
-                text_color=COLORS["accent"],
+                text_color=self.colors["accent"],
             ).pack(anchor="w", padx=12, pady=(10, 6))
             box = ctk.CTkTextbox(
                 card,
                 height=140,
                 font=FONTS["body_sm"],
-                fg_color=COLORS["input_bg"],
-                text_color=COLORS["text"],
-                border_color=COLORS["border"],
+                fg_color=self.colors["input_bg"],
+                text_color=self.colors["text"],
+                border_color=self.colors["border"],
                 border_width=1,
                 corner_radius=8,
                 wrap="word",
@@ -1611,9 +1793,9 @@ class JosephApp(ctk.CTk):
         """Build the diagnostics tab."""
         tab = ctk.CTkScrollableFrame(
             parent,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
         )
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_columnconfigure(0, weight=1)
@@ -1628,25 +1810,25 @@ class JosephApp(ctk.CTk):
         ], start=0):
             card = ctk.CTkFrame(
                 tab,
-                fg_color=COLORS["panel"],
+                fg_color=self.colors["panel"],
                 corner_radius=12,
                 border_width=1,
-                border_color=COLORS["border"],
+                border_color=self.colors["border"],
             )
             card.grid(row=row, column=0, sticky="ew", padx=6, pady=6)
             ctk.CTkLabel(
                 card,
                 text=title,
                 font=FONTS["name"],
-                text_color=COLORS["accent"],
+                text_color=self.colors["accent"],
             ).pack(anchor="w", padx=12, pady=(10, 6))
             box = ctk.CTkTextbox(
                 card,
                 height=138,
                 font=FONTS["body_sm"],
-                fg_color=COLORS["input_bg"],
-                text_color=COLORS["text"],
-                border_color=COLORS["border"],
+                fg_color=self.colors["input_bg"],
+                text_color=self.colors["text"],
+                border_color=self.colors["border"],
                 border_width=1,
                 corner_radius=8,
                 wrap="word",
@@ -1730,7 +1912,7 @@ class JosephApp(ctk.CTk):
 
     def _build_graph_tab(self, parent):
         """Build the knowledge graph visualizer."""
-        tab = ctk.CTkFrame(parent, fg_color=COLORS["bg"])
+        tab = ctk.CTkFrame(parent, fg_color=self.colors["bg"])
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_rowconfigure(1, weight=1)
         tab.grid_columnconfigure(0, weight=3)
@@ -1738,7 +1920,7 @@ class JosephApp(ctk.CTk):
         self._graph_tab = tab
         self._graph_hitboxes = {}
 
-        controls = ctk.CTkFrame(tab, fg_color=COLORS["panel"], corner_radius=0)
+        controls = ctk.CTkFrame(tab, fg_color=self.colors["panel"], corner_radius=0)
         controls.grid(row=0, column=0, columnspan=2, sticky="ew")
         controls.grid_columnconfigure(1, weight=1)
 
@@ -1755,9 +1937,9 @@ class JosephApp(ctk.CTk):
             width=66,
             height=28,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._refresh_graph_tab,
         ).grid(row=0, column=2, padx=(0, 12), pady=10, sticky="e")
@@ -1775,10 +1957,10 @@ class JosephApp(ctk.CTk):
 
         canvas_card = ctk.CTkFrame(
             tab,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=12,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         canvas_card.grid(row=1, column=0, sticky="nsew", padx=(6, 4), pady=8)
         canvas_card.grid_rowconfigure(0, weight=1)
@@ -1786,29 +1968,32 @@ class JosephApp(ctk.CTk):
         self._graph_canvas = tk.Canvas(
             canvas_card,
             highlightthickness=0,
-            bg=COLORS["bg"],
+            bg=self.colors["bg"],
         )
         self._graph_canvas.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         self._graph_canvas.bind("<Button-1>", self._on_graph_click)
+        self._graph_canvas.bind("<MouseWheel>", self._on_graph_scroll)
+        self._graph_canvas.bind("<ButtonPress-3>", self._on_graph_pan_start)
+        self._graph_canvas.bind("<B3-Motion>", self._on_graph_pan_move)
 
         side = ctk.CTkFrame(
             tab,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=12,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         side.grid(row=1, column=1, sticky="nsew", padx=(4, 6), pady=8)
         side.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(side, text="Node Inspection", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+        ctk.CTkLabel(side, text="Node Inspection", font=FONTS["name"], text_color=self.colors["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
         self._graph_detail_box = ctk.CTkTextbox(
             side,
             height=260,
             font=FONTS["body_sm"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            text_color=self.colors["text"],
+            border_color=self.colors["border"],
             border_width=1,
             corner_radius=8,
             wrap="word",
@@ -1821,8 +2006,32 @@ class JosephApp(ctk.CTk):
         self._graph_zoom = float(value)
         self._refresh_graph_tab()
 
+    def _on_graph_scroll(self, event):
+        """Mouse wheel zoom for knowledge graph."""
+        delta = event.delta / 120 * 0.1
+        self._graph_zoom = max(0.3, min(3.0, self._graph_zoom + delta))
+        try:
+            self._graph_zoom_slider.set(self._graph_zoom)
+        except Exception:
+            pass
+        self._refresh_graph_tab()
+
+    def _on_graph_pan_start(self, event):
+        """Right-click pan start."""
+        self._graph_pan_start_pos = (event.x, event.y)
+
+    def _on_graph_pan_move(self, event):
+        """Right-click pan move."""
+        if self._graph_pan_start_pos:
+            dx = event.x - self._graph_pan_start_pos[0]
+            dy = event.y - self._graph_pan_start_pos[1]
+            self._graph_pan_offset_x += dx
+            self._graph_pan_offset_y += dy
+            self._graph_pan_start_pos = (event.x, event.y)
+            self._refresh_graph_tab()
+
     def _refresh_graph_tab(self):
-        """Redraw the knowledge graph canvas."""
+        """Redraw the knowledge graph canvas with layout caching."""
         if not hasattr(self, "_graph_canvas"):
             return
         engine = self._active_hyper_engine()
@@ -1835,7 +2044,7 @@ class JosephApp(ctk.CTk):
             self._graph_canvas.create_text(
                 300, 220,
                 text="No knowledge graph data yet.",
-                fill=COLORS["text_dim"],
+                fill=self.colors["text_dim"],
                 font=("Segoe UI", 14, "bold"),
             )
             self._set_textbox_content(self._graph_detail_box, "No graph data available.")
@@ -1852,17 +2061,23 @@ class JosephApp(ctk.CTk):
             nodes = list(graph.nodes(data=True))[:25]
         sub_nodes = [node_id for node_id, _ in nodes]
         subgraph = graph.subgraph(sub_nodes).copy()
-        try:
-            import networkx as nx  # local import for optional layout
-            self._graph_positions = nx.spring_layout(subgraph, seed=42)
-        except Exception:
-            self._graph_positions = {node_id: (idx / max(1, len(sub_nodes)), 0.5) for idx, node_id in enumerate(sub_nodes)}
+
+        # Cache layout: only recompute when node set or search changes
+        node_hash = hash(frozenset(sub_nodes) | frozenset([search]))
+        if (not hasattr(self, "_graph_node_hash") or
+                self._graph_node_hash != node_hash):
+            self._graph_node_hash = node_hash
+            try:
+                import networkx as nx
+                self._graph_positions = nx.spring_layout(subgraph, seed=42)
+            except Exception:
+                self._graph_positions = {node_id: (idx / max(1, len(sub_nodes)), 0.5) for idx, node_id in enumerate(sub_nodes)}
 
         width = max(640, int(self._graph_canvas.winfo_width() or 640))
         height = max(420, int(self._graph_canvas.winfo_height() or 420))
         scale = 0.38 * self._graph_zoom
-        center_x = width / 2
-        center_y = height / 2
+        center_x = width / 2 + getattr(self, '_graph_pan_offset_x', 0)
+        center_y = height / 2 + getattr(self, '_graph_pan_offset_y', 0)
         positions = {}
         for node_id, (x, y) in self._graph_positions.items():
             positions[node_id] = (
@@ -1875,20 +2090,20 @@ class JosephApp(ctk.CTk):
                 continue
             x1, y1 = positions[source]
             x2, y2 = positions[target]
-            self._graph_canvas.create_line(x1, y1, x2, y2, fill=COLORS["accent_dim"], width=2)
+            self._graph_canvas.create_line(x1, y1, x2, y2, fill=self.colors["accent_dim"], width=2)
             mid_x = (x1 + x2) / 2
             mid_y = (y1 + y2) / 2
             relation = str(data.get("relation", "related"))
-            self._graph_canvas.create_text(mid_x, mid_y, text=relation, fill=COLORS["text_dim"], font=("Segoe UI", 8))
+            self._graph_canvas.create_text(mid_x, mid_y, text=relation, fill=self.colors["text_dim"], font=("Segoe UI", 8))
 
         for node_id, data in subgraph.nodes(data=True):
             x, y = positions.get(node_id, (center_x, center_y))
             label = str(data.get("label", node_id))
             importance = float(data.get("importance", 0.5))
             radius = 18 + importance * 8
-            fill = COLORS["accent"] if node_id == self._selected_graph_node else COLORS["card"]
-            item = self._graph_canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill=fill, outline=COLORS["border_light"], width=1.5)
-            text_item = self._graph_canvas.create_text(x, y, text=label[:18], fill=COLORS["text"], font=("Segoe UI", 9, "bold"))
+            fill = self.colors["accent"] if node_id == self._selected_graph_node else self.colors["card"]
+            item = self._graph_canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill=fill, outline=self.colors["border_light"], width=1.5)
+            text_item = self._graph_canvas.create_text(x, y, text=label[:18], fill=self.colors["text"], font=("Segoe UI", 9, "bold"))
             self._graph_hitboxes[item] = node_id
             self._graph_hitboxes[text_item] = node_id
 
@@ -1929,7 +2144,7 @@ class JosephApp(ctk.CTk):
 
     def _build_memory_tab(self, parent):
         """Build the memory explorer tab."""
-        tab = ctk.CTkFrame(parent, fg_color=COLORS["bg"])
+        tab = ctk.CTkFrame(parent, fg_color=self.colors["bg"])
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_rowconfigure(1, weight=1)
         tab.grid_columnconfigure(0, weight=1)
@@ -1937,7 +2152,7 @@ class JosephApp(ctk.CTk):
         self._memory_tab = tab
         self._memory_memory_rows = []
 
-        top = ctk.CTkFrame(tab, fg_color=COLORS["panel"], corner_radius=0)
+        top = ctk.CTkFrame(tab, fg_color=self.colors["panel"], corner_radius=0)
         top.grid(row=0, column=0, columnspan=2, sticky="ew")
         top.grid_columnconfigure(0, weight=1)
         self._memory_search_box = ctk.CTkEntry(top, placeholder_text="Search memories...", height=28, font=FONTS["body_sm"])
@@ -1948,9 +2163,9 @@ class JosephApp(ctk.CTk):
             width=60,
             height=28,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._refresh_memory_tab,
         ).grid(row=0, column=1, padx=(0, 6), pady=10)
@@ -1960,18 +2175,34 @@ class JosephApp(ctk.CTk):
             width=66,
             height=28,
             font=FONTS["sidebar"],
-            fg_color=COLORS["card"],
-            hover_color=COLORS["border_light"],
-            text_color=COLORS["text"],
+            fg_color=self.colors["card"],
+            hover_color=self.colors["border_light"],
+            text_color=self.colors["text"],
             corner_radius=5,
             command=self._refresh_memory_tab,
         ).grid(row=0, column=2, padx=(0, 12), pady=10)
 
+        # Sort/filter bar
+        filter_bar = ctk.CTkFrame(top, fg_color="transparent")
+        filter_bar.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10, pady=(0, 8))
+        ctk.CTkLabel(filter_bar, text="Sort:", font=FONTS["sidebar_h"],
+                     text_color=self.colors["text_dim"]).pack(side="left", padx=(0, 4))
+        self._memory_sort_var = tk.StringVar(value="recent")
+        ctk.CTkComboBox(filter_bar, values=["recent", "oldest", "importance"],
+                        variable=self._memory_sort_var, width=100, height=26,
+                        command=lambda v: self._refresh_memory_tab()).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(filter_bar, text="Category:", font=FONTS["sidebar_h"],
+                     text_color=self.colors["text_dim"]).pack(side="left", padx=(0, 4))
+        self._memory_cat_var = tk.StringVar(value="all")
+        ctk.CTkComboBox(filter_bar, values=["all", "fact", "memory", "task"],
+                        variable=self._memory_cat_var, width=100, height=26,
+                        command=lambda v: self._refresh_memory_tab()).pack(side="left")
+
         left = ctk.CTkScrollableFrame(
             tab,
-            fg_color=COLORS["panel"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["panel"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=12,
         )
         left.grid(row=1, column=0, sticky="nsew", padx=(6, 4), pady=8)
@@ -1980,21 +2211,21 @@ class JosephApp(ctk.CTk):
 
         right = ctk.CTkFrame(
             tab,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=12,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         right.grid(row=1, column=1, sticky="nsew", padx=(4, 6), pady=8)
         right.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(right, text="Memory Detail", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+        ctk.CTkLabel(right, text="Memory Detail", font=FONTS["name"], text_color=self.colors["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
         self._memory_detail_box = ctk.CTkTextbox(
             right,
             height=260,
             font=FONTS["body_sm"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            text_color=self.colors["text"],
+            border_color=self.colors["border"],
             border_width=1,
             corner_radius=8,
             wrap="word",
@@ -2014,9 +2245,9 @@ class JosephApp(ctk.CTk):
                 width=72,
                 height=28,
                 font=FONTS["sidebar"],
-                fg_color=COLORS["card"],
-                hover_color=COLORS["border_light"],
-                text_color=COLORS["text"],
+                fg_color=self.colors["card"],
+                hover_color=self.colors["border_light"],
+                text_color=self.colors["text"],
                 corner_radius=5,
                 command=cmd,
             ).pack(side="left", padx=(0, 6))
@@ -2028,6 +2259,8 @@ class JosephApp(ctk.CTk):
         if not hasattr(self, "_memory_list_frame"):
             return
         query = self._memory_search_box.get().strip() if hasattr(self, "_memory_search_box") else ""
+        sort_mode = self._memory_sort_var.get() if hasattr(self, "_memory_sort_var") else "recent"
+        cat_filter = self._memory_cat_var.get() if hasattr(self, "_memory_cat_var") else "all"
         for widget in self._memory_list_frame.winfo_children():
             widget.destroy()
 
@@ -2049,22 +2282,46 @@ class JosephApp(ctk.CTk):
             seen.add(key)
             normalized.append(item)
 
+        # Apply category filter
+        if cat_filter != "all":
+            filtered = []
+            for item in normalized:
+                tags = item.get("tags") or (item.get("metadata") or {}).get("tags") or []
+                if isinstance(tags, list):
+                    tag_str = " ".join(tags).lower()
+                else:
+                    tag_str = str(tags).lower()
+                if cat_filter in tag_str:
+                    filtered.append(item)
+            normalized = filtered
+
+        # Sort
+        if sort_mode == "oldest":
+            normalized.reverse()
+        elif sort_mode == "importance":
+            try:
+                normalized.sort(key=lambda x: float(x.get("metadata", {}).get("importance", 0) if isinstance(x.get("metadata"), dict) else 0), reverse=True)
+            except Exception:
+                pass
+
         self._memory_memory_rows = normalized
         for item in normalized:
             meta_id = (item.get("metadata") or {}).get("memory_id")
             memory_id = int(item.get("id") or meta_id or item.get("memory_id") or 0)
             if memory_id <= 0:
                 continue
-            preview = str(item.get("content", ""))[:120].replace("\n", " ")
+            preview = str(item.get("content", ""))[:100].replace("\n", " ")
+            tags = item.get("tags") or (item.get("metadata") or {}).get("tags") or []
+            tag_str = f" [{', '.join(tags[:3])}]" if tags else ""
             row = ctk.CTkButton(
                 self._memory_list_frame,
-                text=f"#{memory_id}  {preview}",
+                text=f"#{memory_id}{tag_str}  {preview}",
                 anchor="w",
                 height=34,
                 font=FONTS["body_sm"],
-                fg_color=COLORS["card"],
-                hover_color=COLORS["border_light"],
-                text_color=COLORS["text"],
+                fg_color=self.colors["card"],
+                hover_color=self.colors["border_light"],
+                text_color=self.colors["text"],
                 corner_radius=8,
                 command=lambda mid=memory_id: self._select_memory(mid),
             )
@@ -2111,7 +2368,7 @@ class JosephApp(ctk.CTk):
         if new_text is None:
             return
         if self.memory.update_memory(self._selected_memory_id, content=new_text):
-            self._add_system_message("Memory updated.", COLORS["success"])
+            self._add_system_message("Memory updated.", self.colors["success"])
             self._refresh_memory_tab()
 
     def _delete_selected_memory(self):
@@ -2121,7 +2378,7 @@ class JosephApp(ctk.CTk):
         if not messagebox.askyesno("Delete Memory", "Delete this memory permanently?", parent=self):
             return
         if self.memory.delete_memory(self._selected_memory_id):
-            self._add_system_message("Memory deleted.", COLORS["warning"])
+            self._add_system_message("Memory deleted.", self.colors["warning"])
             self._selected_memory_id = None
             self._refresh_memory_tab()
 
@@ -2130,7 +2387,7 @@ class JosephApp(ctk.CTk):
         if self._selected_memory_id is None:
             return
         if self.memory.pin_memory(self._selected_memory_id, enabled=True):
-            self._add_system_message("Memory pinned.", COLORS["success"])
+            self._add_system_message("Memory pinned.", self.colors["success"])
             self._refresh_memory_tab()
 
     def _archive_selected_memory(self):
@@ -2138,16 +2395,16 @@ class JosephApp(ctk.CTk):
         if self._selected_memory_id is None:
             return
         if self.memory.archive_memory(self._selected_memory_id, enabled=True):
-            self._add_system_message("Memory archived.", COLORS["warning"])
+            self._add_system_message("Memory archived.", self.colors["warning"])
             self._refresh_memory_tab()
 
     def _build_agents_tab(self, parent):
-        """Build the agent collaboration center."""
+        """Build the agent collaboration center with workflow visualization."""
         tab = ctk.CTkScrollableFrame(
             parent,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
         )
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_columnconfigure(0, weight=1)
@@ -2156,21 +2413,49 @@ class JosephApp(ctk.CTk):
 
         card = ctk.CTkFrame(
             tab,
-            fg_color=COLORS["panel"],
+            fg_color=self.colors["panel"],
             corner_radius=12,
             border_width=1,
-            border_color=COLORS["border"],
+            border_color=self.colors["border"],
         )
         card.grid(row=0, column=0, sticky="nsew", padx=6, pady=8)
         card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(card, text="Agent Collaboration Flow", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+        ctk.CTkLabel(card, text="Agent Workflow", font=FONTS["name"], text_color=self.colors["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+
+        # Agent workflow pipeline
+        self._agent_flow_container = ctk.CTkFrame(card, fg_color="transparent")
+        self._agent_flow_container.pack(fill="x", padx=12, pady=(0, 8))
+
+        agent_defs = [
+            ("Research Agent", "research"),
+            ("Memory Agent", "memory"),
+            ("Planning Agent", "planning"),
+            ("Reasoning Agent", "reasoning"),
+            ("Coordinator", "coordinator"),
+        ]
+        self._agent_status_labels = {}
+        for name, key in agent_defs:
+            row = ctk.CTkFrame(self._agent_flow_container, fg_color=self.colors["card"],
+                               corner_radius=8, border_width=1, border_color=self.colors["border"])
+            row.pack(fill="x", pady=2)
+            row.grid_columnconfigure(1, weight=1)
+            dot = ctk.CTkLabel(row, text="○", font=("Segoe UI", 12), text_color=self.colors["text_dim"])
+            dot.grid(row=0, column=0, padx=(8, 4), pady=4)
+            ctk.CTkLabel(row, text=name, font=FONTS["sidebar"], text_color=self.colors["text"]).grid(row=0, column=1, sticky="w")
+            sl = ctk.CTkLabel(row, text="idle", font=FONTS["time"], text_color=self.colors["text_dim"])
+            sl.grid(row=0, column=2, padx=(4, 8))
+            self._agent_status_labels[key] = (dot, sl)
+
+        # Separator
+        ctk.CTkFrame(card, height=1, fg_color=self.colors["border"]).pack(fill="x", padx=12, pady=4)
+
         self._agents_box = ctk.CTkTextbox(
             card,
-            height=360,
+            height=280,
             font=FONTS["body_sm"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            text_color=self.colors["text"],
+            border_color=self.colors["border"],
             border_width=1,
             corner_radius=8,
             wrap="word",
@@ -2180,7 +2465,7 @@ class JosephApp(ctk.CTk):
         self._refresh_agents_tab()
 
     def _refresh_agents_tab(self):
-        """Refresh agent logs and the collaboration flow."""
+        """Refresh agent logs and update the workflow visualization."""
         if not hasattr(self, "_agents_box"):
             return
         hyper = self._active_hyper_engine()
@@ -2199,19 +2484,34 @@ class JosephApp(ctk.CTk):
                     f"[{entry.get('agent', 'agent')}] {entry.get('phase', '')} "
                     f"({entry.get('duration_ms', 0)} ms)"
                 )
-                content = entry.get("content", "")
-                if content:
-                    lines.append(content[:600])
+                entry_content = entry.get("content", "")
+                if entry_content:
+                    lines.append(entry_content[:600])
                     lines.append("")
+
+        # Update workflow status dots
+        if logs:
+            latest = logs[-1]
+            agent_name = str(latest.get("agent", "")).lower()
+            for key, (dot, lbl) in self._agent_status_labels.items():
+                is_active = key in agent_name
+                try:
+                    dot.configure(text="●" if is_active else "○",
+                                  text_color=self.colors["success"] if is_active else self.colors["text_dim"])
+                    lbl.configure(text="active" if is_active else "idle",
+                                  text_color=self.colors["success"] if is_active else self.colors["text_dim"])
+                except Exception:
+                    pass
+
         self._set_textbox_content(self._agents_box, "\n".join(lines).strip())
 
     def _build_improvements_tab(self, parent):
         """Build the self-improvement center."""
         tab = ctk.CTkScrollableFrame(
             parent,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
         )
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_columnconfigure(0, weight=1)
@@ -2219,17 +2519,17 @@ class JosephApp(ctk.CTk):
         self._improvement_frames = []
         self._improvement_decisions = {}
 
-        header = ctk.CTkFrame(tab, fg_color=COLORS["panel"], corner_radius=0)
+        header = ctk.CTkFrame(tab, fg_color=self.colors["panel"], corner_radius=0)
         header.grid(row=0, column=0, sticky="ew")
         header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(header, text="Improvement Analyzer", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=10)
+        ctk.CTkLabel(header, text="Improvement Analyzer", font=FONTS["name"], text_color=self.colors["accent"]).pack(anchor="w", padx=12, pady=10)
         self._improvement_summary_box = ctk.CTkTextbox(
             tab,
             height=120,
             font=FONTS["body_sm"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text"],
-            border_color=COLORS["border"],
+            fg_color=self.colors["input_bg"],
+            text_color=self.colors["text"],
+            border_color=self.colors["border"],
             border_width=1,
             corner_radius=8,
             wrap="word",
@@ -2238,9 +2538,9 @@ class JosephApp(ctk.CTk):
         self._set_textbox_content(self._improvement_summary_box, "Loading improvement suggestions...")
         self._improvement_list = ctk.CTkScrollableFrame(
             tab,
-            fg_color=COLORS["panel"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["panel"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
             corner_radius=12,
         )
         self._improvement_list.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 8))
@@ -2262,15 +2562,15 @@ class JosephApp(ctk.CTk):
             widget.destroy()
         findings = (summary or {}).get("findings") or []
         if not findings:
-            ctk.CTkLabel(self._improvement_list, text="No findings yet.", text_color=COLORS["text_dim"]).pack(padx=12, pady=12)
+            ctk.CTkLabel(self._improvement_list, text="No findings yet.", text_color=self.colors["text_dim"]).pack(padx=12, pady=12)
             return
         for idx, finding in enumerate(findings[:20]):
             card = ctk.CTkFrame(
                 self._improvement_list,
-                fg_color=COLORS["card"],
+                fg_color=self.colors["card"],
                 corner_radius=10,
                 border_width=1,
-                border_color=COLORS["border"],
+                border_color=self.colors["border"],
             )
             card.pack(fill="x", padx=12, pady=(10 if idx == 0 else 0, 8))
             text = "\n".join(
@@ -2281,7 +2581,7 @@ class JosephApp(ctk.CTk):
                     f"Estimated Improvement: {finding.get('estimated_improvement', 'n/a')}",
                 ]
             )
-            ctk.CTkLabel(card, text=text, justify="left", anchor="w", wraplength=720, text_color=COLORS["text"]).pack(anchor="w", padx=12, pady=(10, 6))
+            ctk.CTkLabel(card, text=text, justify="left", anchor="w", wraplength=720, text_color=self.colors["text"]).pack(anchor="w", padx=12, pady=(10, 6))
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(anchor="w", padx=12, pady=(0, 10))
             signature = f"{finding.get('location')}::{finding.get('issue')}"
@@ -2292,9 +2592,9 @@ class JosephApp(ctk.CTk):
                     width=72,
                     height=26,
                     font=FONTS["sidebar"],
-                    fg_color=COLORS["card"],
-                    hover_color=COLORS["border_light"],
-                    text_color=COLORS["text"],
+                    fg_color=self.colors["card"],
+                    hover_color=self.colors["border_light"],
+                    text_color=self.colors["text"],
                     corner_radius=5,
                     command=lambda sig=signature, st=status: self._record_improvement_decision(sig, st),
                 ).pack(side="left", padx=(0, 6))
@@ -2302,15 +2602,15 @@ class JosephApp(ctk.CTk):
     def _record_improvement_decision(self, signature: str, status: str):
         """Record a human decision about an improvement suggestion."""
         self._improvement_decisions[signature] = status
-        self._add_system_message(f"Improvement {status}: {signature}", COLORS["accent"])
+        self._add_system_message(f"Improvement {status}: {signature}", self.colors["accent"])
 
     def _build_settings_tab(self, parent):
         """Build the settings area."""
         tab = ctk.CTkScrollableFrame(
             parent,
-            fg_color=COLORS["bg"],
-            scrollbar_button_color=COLORS["scrollbar"],
-            scrollbar_button_hover_color=COLORS["border_light"],
+            fg_color=self.colors["bg"],
+            scrollbar_button_color=self.colors["scrollbar"],
+            scrollbar_button_hover_color=self.colors["border_light"],
         )
         tab.grid(row=0, column=0, sticky="nsew")
         tab.grid_columnconfigure(0, weight=1)
@@ -2322,14 +2622,18 @@ class JosephApp(ctk.CTk):
                 ("hyper_enabled", "Enable Hyper Layer", bool(self._active_hyper_engine()), self._on_toggle_hyper),
                 ("research_sources", "Research Sources", self._ui_settings.get("research_sources", 3), self._on_research_sources_change),
             ]),
-            ("Performance Settings", [
+            ("Performance", [
                 ("refresh_interval_ms", "Refresh Interval (ms)", self._ui_settings.get("refresh_interval_ms", 2500), self._on_refresh_interval_change),
                 ("compact_panels", "Compact Panels", self._ui_settings.get("compact_panels", False), self._on_compact_panels_change),
             ]),
-            ("Appearance Settings", [
+            ("Appearance", [
                 ("theme_mode", "Theme Mode", self._theme_mode, self._on_theme_mode_change),
                 ("density", "Layout Density", self._ui_settings.get("density", "comfortable"), self._on_density_change),
                 ("animations", "Animations", self._ui_settings.get("animations", True), self._on_animations_change),
+                ("font_size", "Font Scale", self._font_scale, self._on_font_scale_change),
+            ]),
+            ("Voice", [
+                ("voice_enabled", "Voice Enabled", self._voice_enabled, self._on_voice_enabled_change),
             ]),
         ]
 
@@ -2337,17 +2641,17 @@ class JosephApp(ctk.CTk):
         for section_title, items in sections:
             card = ctk.CTkFrame(
                 tab,
-                fg_color=COLORS["panel"],
+                fg_color=self.colors["panel"],
                 corner_radius=12,
                 border_width=1,
-                border_color=COLORS["border"],
+                border_color=self.colors["border"],
             )
             card.grid(row=row, column=0, sticky="ew", padx=6, pady=(8, 4))
             card.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(card, text=section_title, font=FONTS["name"], text_color=COLORS["accent"]).grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6))
+            ctk.CTkLabel(card, text=section_title, font=FONTS["name"], text_color=self.colors["accent"]).grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6))
             inner_row = 1
             for key, label, value, handler in items:
-                ctk.CTkLabel(card, text=label, font=FONTS["sidebar"], text_color=COLORS["text_dim"]).grid(row=inner_row, column=0, sticky="w", padx=12, pady=6)
+                ctk.CTkLabel(card, text=label, font=FONTS["sidebar"], text_color=self.colors["text_dim"]).grid(row=inner_row, column=0, sticky="w", padx=12, pady=6)
                 if isinstance(value, bool):
                     var = tk.BooleanVar(value=value)
                     widget = ctk.CTkSwitch(card, text="", variable=var, command=lambda k=key, v=var, h=handler: h(k, v.get()))
@@ -2370,7 +2674,7 @@ class JosephApp(ctk.CTk):
             tab,
             text="Changes are applied live when possible; some engine-level options take effect on the next turn or restart.",
             font=FONTS["body_sm"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         ).grid(row=row, column=0, sticky="w", padx=10, pady=10)
         self._refresh_settings_tab()
 
@@ -2393,6 +2697,10 @@ class JosephApp(ctk.CTk):
                 self._setting_vars["density"].set(str(self._ui_settings.get("density", "comfortable")))
             if "animations" in self._setting_vars:
                 self._setting_vars["animations"].set(bool(self._ui_settings.get("animations", True)))
+            if "font_size" in self._setting_vars:
+                self._setting_vars["font_size"].set(str(self._font_scale))
+            if "voice_enabled" in self._setting_vars:
+                self._setting_vars["voice_enabled"].set(bool(self._voice_enabled))
         except Exception:
             pass
 
@@ -2400,7 +2708,7 @@ class JosephApp(ctk.CTk):
         self._ui_settings[key] = bool(value)
         self._add_system_message(
             "Hyper layer UI toggle updated. The next response will respect the new state.",
-            COLORS["accent"],
+            self.colors["accent"],
         )
 
     def _on_research_sources_change(self, key: str, value):
@@ -2434,11 +2742,26 @@ class JosephApp(ctk.CTk):
     def _on_animations_change(self, key: str, value):
         self._ui_settings[key] = bool(value)
 
+    def _on_font_scale_change(self, key: str, value):
+        try:
+            self._font_scale = max(0.7, min(1.5, float(value)))
+        except Exception:
+            self._font_scale = 1.0
+        self._save_layout_state()
+
+    def _on_voice_enabled_change(self, key: str, value):
+        self._voice_enabled = bool(value)
+        if self._voice:
+            if self._voice_enabled:
+                self._voice.start(push_to_talk=False)
+            else:
+                self._voice.stop()
+
     def _on_escape_key(self, event) -> None:
         """Escape: stop speech if speaking, otherwise focus input."""
         if self._voice and self._voice.tts.is_speaking:
             self._voice.tts.stop_speaking()
-            self._set_status(f"Connected  {settings.OLLAMA_MODEL}", COLORS["success"])
+            self._set_status(f"Connected  {settings.OLLAMA_MODEL}", self.colors["success"])
         else:
             self._input_box.focus()
 
@@ -2469,7 +2792,7 @@ class JosephApp(ctk.CTk):
             parent,
             text=title,
             font=("Segoe UI", 9, "bold"),
-            text_color=COLORS["accent"],
+            text_color=self.colors["accent"],
         ).pack(anchor="w", pady=(8, 3))
 
     def _add_sidebar_stat(self, parent, label: str, value: str) -> ctk.CTkLabel:
@@ -2481,7 +2804,7 @@ class JosephApp(ctk.CTk):
             row,
             text=label,
             font=FONTS["sidebar"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
             width=80,
             anchor="w",
         ).pack(side="left")
@@ -2490,7 +2813,7 @@ class JosephApp(ctk.CTk):
             row,
             text=value,
             font=FONTS["sidebar"],
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
             anchor="w",
         )
         val.pack(side="left", fill="x", expand=True)
@@ -2501,7 +2824,7 @@ class JosephApp(ctk.CTk):
         ctk.CTkFrame(
             parent,
             height=1,
-            fg_color=COLORS["border"],
+            fg_color=self.colors["border"],
         ).pack(fill="x", pady=8)
 
     # ------------------------------------------------------------------ #
@@ -2542,7 +2865,7 @@ class JosephApp(ctk.CTk):
         header_row.pack(fill="x", pady=(0, 3), padx=(4 if is_joseph else 0, 0))
 
         name = settings.JOSEPH_NAME if is_joseph else settings.USER_NAME
-        name_color = COLORS["text_joseph"] if is_joseph else COLORS["text_user"]
+        name_color = self.colors["text_joseph"] if is_joseph else self.colors["text_user"]
 
         ctk.CTkLabel(
             header_row,
@@ -2555,7 +2878,7 @@ class JosephApp(ctk.CTk):
             header_row,
             text=f"  {ts}",
             font=FONTS["time"],
-            text_color=COLORS["text_dim"],
+            text_color=self.colors["text_dim"],
         ).pack(side="left")
 
         # Bubble wrapper (for accent bar on Joseph messages)
@@ -2565,7 +2888,7 @@ class JosephApp(ctk.CTk):
             wrapper.grid_columnconfigure(1, weight=1)
 
             # Left accent bar (3px, accent color)
-            accent_bar = ctk.CTkFrame(wrapper, width=3, fg_color=COLORS["accent"], corner_radius=2)
+            accent_bar = ctk.CTkFrame(wrapper, width=3, fg_color=self.colors["accent"], corner_radius=2)
             accent_bar.grid(row=0, column=0, sticky="ns", padx=(0, 8))
 
             bubble_parent = ctk.CTkFrame(wrapper, fg_color="transparent")
@@ -2575,7 +2898,7 @@ class JosephApp(ctk.CTk):
             bubble_parent = bubble_row
 
         # Message bubble
-        bubble_color = COLORS["card"] if is_joseph else COLORS["card_user"]
+        bubble_color = self.colors["card"] if is_joseph else self.colors["card_user"]
 
         # Calculate initial height based on text length
         lines = max(2, text.count("\n") + len(text) // 75 + 1)
@@ -2585,7 +2908,7 @@ class JosephApp(ctk.CTk):
             bubble_parent,
             font=FONTS["body"],
             fg_color=bubble_color,
-            text_color=COLORS["text"],
+            text_color=self.colors["text"],
             border_width=0,
             corner_radius=8,
             wrap="word",
@@ -2616,7 +2939,7 @@ class JosephApp(ctk.CTk):
             # Visual feedback — show which was clicked
             for widget in row.winfo_children():
                 widget.configure(fg_color="transparent")
-            color = COLORS["success"] if value > 0 else COLORS["error"]
+            color = self.colors["success"] if value > 0 else self.colors["error"]
             # Briefly flash the button
             self.after(100, lambda: None)  # Small delay for feel
             logger.debug(f"Response rated: {value}")
@@ -2627,8 +2950,8 @@ class JosephApp(ctk.CTk):
             font=("Segoe UI", 11),
             width=28, height=22,
             fg_color="transparent",
-            hover_color=COLORS["card"],
-            text_color=COLORS["text_dim"],
+            hover_color=self.colors["card"],
+            text_color=self.colors["text_dim"],
             corner_radius=4,
             command=lambda: rate(1),
         ).pack(side="left", padx=(0, 2))
@@ -2639,25 +2962,75 @@ class JosephApp(ctk.CTk):
             font=("Segoe UI", 11),
             width=28, height=22,
             fg_color="transparent",
-            hover_color=COLORS["card"],
-            text_color=COLORS["text_dim"],
+            hover_color=self.colors["card"],
+            text_color=self.colors["text_dim"],
             corner_radius=4,
             command=lambda: rate(-1),
         ).pack(side="left")
 
+        # Separator
+        ctk.CTkFrame(btn_row, width=1, height=14, fg_color=self.colors["border"]).pack(side="left", padx=6)
+
+        ctk.CTkButton(
+            btn_row,
+            text="Copy",
+            font=("Segoe UI", 10),
+            width=42, height=22,
+            fg_color="transparent",
+            hover_color=self.colors["card"],
+            text_color=self.colors["text_dim"],
+            corner_radius=4,
+            command=lambda: self._copy_to_clipboard(textbox.get("1.0", "end-1c")),
+        ).pack(side="left", padx=(0, 2))
+
+        ctk.CTkButton(
+            btn_row,
+            text="Regen",
+            font=("Segoe UI", 10),
+            width=48, height=22,
+            fg_color="transparent",
+            hover_color=self.colors["card"],
+            text_color=self.colors["text_dim"],
+            corner_radius=4,
+            command=self._regenerate_last,
+        ).pack(side="left")
+
+    def _copy_to_clipboard(self, text: str):
+        """Copy text to system clipboard."""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._add_system_message("Copied to clipboard", self.colors["text_dim"])
+        except Exception as e:
+            logger.debug(f"Copy failed: {e}")
+
+    def _regenerate_last(self):
+        """Regenerate the last assistant response."""
+        try:
+            history = self.memory.get_conversation_history()
+            user_msgs = [m for m in history if m.get("role") == "user"]
+            if not user_msgs:
+                return
+            last_user = user_msgs[-1]["content"]
+            if history and history[-1].get("role") == "assistant":
+                self.memory.short_term._messages.pop()
+            self._start_joseph_response(last_user)
+        except Exception as e:
+            logger.debug(f"Regenerate: {e}")
+
     def _add_system_message(self, text: str, color: Optional[str] = None, icon: Optional[str] = None):
         """Add a centered system/status message with optional icon."""
-        msg_color = color or COLORS["text_dim"]
+        msg_color = color or self.colors["text_dim"]
 
         # Auto-pick icon based on color if not provided
         if icon is None:
-            if color == COLORS["success"]:
+            if color == self.colors["success"]:
                 icon = "✓"
-            elif color == COLORS["error"]:
+            elif color == self.colors["error"]:
                 icon = "✗"
-            elif color == COLORS["warning"]:
+            elif color == self.colors["warning"]:
                 icon = "⚠"
-            elif color == COLORS["accent"]:
+            elif color == self.colors["accent"]:
                 icon = "ℹ"
             else:
                 icon = ""
@@ -2716,7 +3089,7 @@ class JosephApp(ctk.CTk):
             self._typing_frame,
             text="Joseph  ● ○ ○",
             font=FONTS["body_sm"],
-            text_color=COLORS["thinking"],
+            text_color=self.colors["thinking"],
         )
         self._typing_label.pack(side="left")
         self._typing_anim_step = 0
@@ -2802,7 +3175,7 @@ class JosephApp(ctk.CTk):
 
         elif cmd == "remember" and arg:
             self.memory.save_explicit_memory(arg)
-            self._add_system_message(f"Saved to memory: {arg}", COLORS["success"])
+            self._add_system_message(f"Saved to memory: {arg}", self.colors["success"])
             self._update_sidebar()
             self._scroll_to_bottom()
 
@@ -2812,13 +3185,13 @@ class JosephApp(ctk.CTk):
                 "          /reminders  /tasks  /notes  /quit\n"
                 "Or just type normally to chat. Press F2 for voice."
             )
-            self._add_system_message(help_text, COLORS["accent"])
+            self._add_system_message(help_text, self.colors["accent"])
             self._scroll_to_bottom()
 
         else:
             self._add_system_message(
                 f"Unknown command: /{cmd}  -  type /help for commands",
-                COLORS["warning"],
+                self.colors["warning"],
             )
             self._scroll_to_bottom()
 
@@ -2834,7 +3207,7 @@ class JosephApp(ctk.CTk):
         self._is_responding = True
         self._current_response = ""
         self._send_btn.configure(state="disabled", text="...")
-        self._set_status("Thinking...", COLORS["warning"])
+        self._set_status("Thinking...", self.colors["warning"])
 
         # Show typing indicator
         self._show_typing_indicator()
@@ -2845,6 +3218,8 @@ class JosephApp(ctk.CTk):
         self._active_textbox = None
         self._first_chunk = True
 
+        # Mark LLM as busy so background tasks yield
+        self._llm_busy.set()
         # Run LLM on background thread
         thread = threading.Thread(
             target=self._llm_worker,
@@ -2857,6 +3232,7 @@ class JosephApp(ctk.CTk):
         """
         Background thread: planner decides routing, then executes.
         """
+        _t0 = time.perf_counter()
         try:
             # Check custom commands first
             if self._custom_commands:
@@ -2877,38 +3253,119 @@ class JosephApp(ctk.CTk):
                     self._response_queue.put(("automation_done", result))
                     return
 
+            # Check for background research (runs alongside LLM, doesn't short-circuit)
+            _research_query = self._detect_research_intent(user_text)
+            if _research_query:
+                self._start_background_research(_research_query)
+
+            # Regular chat - stream from LLM
+            from brain.prompts import get_system_prompt
+            from brain.cognitive_router import quality_check
+
+            _t1 = time.perf_counter()
+
+            # Phase X: Classify request and determine cognitive path
+            _cognitive_decision = None
+            if self._cognitive_router:
+                _cognitive_decision = self._cognitive_router.classify(user_text, llm_interface=self.llm)
+
+            is_chat = self._planner and self._planner.analyze(user_text) == "chat"
+            active_hyper = self._active_hyper_engine()
+
+            # Phase X: Override is_chat with cognitive router classification
+            if _cognitive_decision and _cognitive_decision.path.value == "fast":
+                is_chat = True
+
+            # Chat messages get lightweight context (facts only, no ChromaDB)
+            if is_chat:
+                memory_context = ""
+                facts = self.memory.long_term.format_facts_for_context()
+                if facts and facts != "No facts stored yet.":
+                    memory_context = f"## Known Facts About {settings.USER_NAME}\n{facts}"
+                self._hyper_turn_packet = None
+            else:
+                memory_context = self.memory.get_context_for_llm(query=user_text)
+                self._hyper_turn_packet = prepare_hyper_turn(active_hyper, user_text, memory=self.memory)
+                if self._hyper_turn_packet and self._hyper_turn_packet.get("system_context"):
+                    memory_context = (
+                        f"{memory_context}\n\n{self._hyper_turn_packet['system_context']}"
+                        if memory_context
+                        else self._hyper_turn_packet["system_context"]
+                    )
+                companion_ctx = self.memory.get_companion_context()
+                if companion_ctx:
+                    memory_context = companion_ctx + "\n\n" + memory_context
+
+            # Inject research-in-progress context so LLM knows to acknowledge it
+            if _research_query:
+                research_note = (
+                    f"\n\nNOTE: BACKGROUND RESEARCH IN PROGRESS on '{_research_query}'.\n"
+                    f"The user asked you to research this. Acknowledge that you're looking into it "
+                    f"and will update them with findings. Keep your response conversational."
+                )
+                memory_context += research_note
+
+            _t2 = time.perf_counter()
+            logger.debug(f"[perf] context_build: {_t2-_t1:.3f}s | chat={is_chat}")
+            _t3 = time.perf_counter()
+
             # Check single automation command
+            _ta = time.perf_counter()
             automation_result = self._try_automation(user_text)
+            _tb = time.perf_counter()
+            if _tb-_ta > 0.1:
+                logger.debug(f"[perf] _try_automation: {_tb-_ta:.3f}s")
             if automation_result:
+                # Log automation activity
+                if self._activity_tracker:
+                    self._activity_tracker.log(
+                        entry_type="command",
+                        summary=f"Automation: {user_text[:100]}",
+                        category="automation",
+                        duration_ms=(_tb-_ta)*1000,
+                        source="automation",
+                    )
                 self._response_queue.put(("automation_done", automation_result))
                 # Run memory agent in background
                 if self._memory_agent:
                     import threading
+                    def _safe_px(ua, fr):
+                        if getattr(self, "_llm_busy", None) and self._llm_busy.is_set():
+                            return
+                        self._memory_agent.process_exchange(ua, fr)
                     threading.Thread(
-                        target=self._memory_agent.process_exchange,
+                        target=_safe_px,
                         args=(user_text, automation_result),
                         daemon=True,
                     ).start()
                 return
 
-            # Regular chat - stream from LLM
-            from brain.prompts import get_system_prompt
-
-            memory_context = self.memory.get_context_for_llm(query=user_text)
-            active_hyper = self._active_hyper_engine()
-            self._hyper_turn_packet = prepare_hyper_turn(active_hyper, user_text, memory=self.memory)
-            if self._hyper_turn_packet.get("system_context"):
-                memory_context = (
-                    f"{memory_context}\n\n{self._hyper_turn_packet['system_context']}"
-                    if memory_context
-                    else self._hyper_turn_packet["system_context"]
-                )
             extra_context = get_context_enhancement(active_hyper, user_text)
             if extra_context:
                 memory_context = f"{memory_context}\n\n{extra_context}" if memory_context else extra_context
-            companion_ctx = self.memory.get_companion_context()
-            if companion_ctx:
-                memory_context = companion_ctx + "\n\n" + memory_context
+
+            # Phase X: Inject cognitive depth/path instructions
+            if _cognitive_decision and self._cognitive_router:
+                depth_inst = self._cognitive_router.get_depth_instruction(_cognitive_decision)
+                path_inst = self._cognitive_router.get_path_instruction(_cognitive_decision)
+                if depth_inst or path_inst:
+                    instr = "\n".join(filter(None, [depth_inst, path_inst]))
+                    memory_context = f"{memory_context}\n\n{instr}" if memory_context else instr
+
+            # Phase 7 — project awareness context injection
+            if self._project_awareness:
+                # Lazily wire project manager from Phase 5 when available
+                if not self._project_awareness._pm:
+                    try:
+                        pm = getattr(self, "_phase5_pmgr", None)
+                        if pm:
+                            self._project_awareness._pm = pm
+                    except Exception:
+                        pass
+                if memory_context:
+                    proj_ctx = self._project_awareness.get_context(user_text)
+                    if proj_ctx:
+                        memory_context = f"{memory_context}\n\n{proj_ctx}"
 
             # Phase 7 — advanced personality modifier
             personality_modifier = ""
@@ -2916,22 +3373,52 @@ class JosephApp(ctk.CTk):
                 self._advanced_personality.update(user_text)
                 personality_modifier = self._advanced_personality.get_system_modifier()
 
-            system_prompt = get_system_prompt(
-                user_name=settings.USER_NAME,
-                memory_context=memory_context,
-            )
-            if personality_modifier:
-                system_prompt += f"\n\nCurrent context: {personality_modifier}"
+            # Phase X: Build system prompt with SmartCache if available
+            _cache_key = (memory_context, personality_modifier)
+            _sc = self._smart_cache
+            if _sc:
+                _sp_cached = _sc.get_prompt(str(_cache_key))
+                if _sp_cached:
+                    system_prompt = _sp_cached
+                else:
+                    system_prompt = get_system_prompt(
+                        user_name=settings.USER_NAME,
+                        memory_context=memory_context,
+                    )
+                    if personality_modifier:
+                        system_prompt += f"\n\nCurrent context: {personality_modifier}"
+                    if self._personality_learning:
+                        style = self._personality_learning.get_style_modifier()
+                        if style:
+                            system_prompt += f"\n\nLearned preferences: {style}"
+                    _sc.set_prompt(str(_cache_key), system_prompt)
+            else:
+                _cache_key = (memory_context, personality_modifier)
+                if _cache_key != getattr(self, "_sp_cache_key", None):
+                    system_prompt = get_system_prompt(
+                        user_name=settings.USER_NAME,
+                        memory_context=memory_context,
+                    )
+                    if personality_modifier:
+                        system_prompt += f"\n\nCurrent context: {personality_modifier}"
+                    if self._personality_learning:
+                        style = self._personality_learning.get_style_modifier()
+                        if style:
+                            system_prompt += f"\n\nLearned preferences: {style}"
+                    self._sp_cache = system_prompt
+                    self._sp_cache_key = _cache_key
+                else:
+                    system_prompt = self._sp_cache
 
-            # Add personality learning style
-            if self._personality_learning:
-                style = self._personality_learning.get_style_modifier()
-                if style:
-                    system_prompt += f"\n\nLearned preferences: {style}"
+            # Limit conversation history to last 6 messages for speed
             messages = self.memory.get_conversation_history()
+            if len(messages) > 6:
+                messages = messages[-6:]
 
             full_response = ""
             turn_started = time.perf_counter()
+            _t4 = turn_started
+            logger.debug(f"[perf] context_build: {_t4-_t3:.3f}s | total_pre_llm: {_t4-_t0:.3f}s")
             # Use multi-model router if available, otherwise standard LLM
             if self._multi_model_router and self._multi_model_router._active_fast:
                 stream_source = self._multi_model_router.chat_stream(
@@ -2949,7 +3436,42 @@ class JosephApp(ctk.CTk):
                 self._response_queue.put(("chunk", chunk))
                 full_response += chunk
 
+            # Phase X: Lightweight quality check
+            full_response = quality_check(full_response, user_text)
+
+            # Phase X: Record latency in cognitive decision
+            if _cognitive_decision is not None:
+                _cognitive_decision.latency.total_ms = (time.perf_counter() - _t1) * 1000
+                _cognitive_decision.latency.llm_ms = (time.perf_counter() - turn_started) * 1000
+
+            _t5 = time.perf_counter()
+            logger.debug(f"[perf] llm_stream: {_t5-turn_started:.3f}s | total: {_t5-_t0:.3f}s | tokens: ~{len(full_response.split())}")
             self._response_queue.put(("done", None))
+
+            # Log chat activity
+            _total_ms = (_t5 - _t0) * 1000
+            if self._activity_tracker:
+                self._activity_tracker.log(
+                    entry_type="chat",
+                    summary=f"User: {user_text[:100]}",
+                    category="chat",
+                    duration_ms=_total_ms,
+                    source="joseph",
+                )
+                if full_response:
+                    self._activity_tracker.log(
+                        entry_type="chat",
+                        summary=f"Response: {full_response[:150]}",
+                        category="chat",
+                        duration_ms=0,
+                        source="joseph",
+                    )
+            if self._insight_engine and self._activity_tracker:
+                for entry in self._activity_tracker.recent(3):
+                    self._insight_engine.ingest(entry)
+            if self._ambient_intel and self._activity_tracker:
+                for entry in self._activity_tracker.recent(2):
+                    self._ambient_intel.ingest(entry)
 
             # Self-correction check (background, non-blocking)
             if full_response and len(full_response.split()) > 3:
@@ -2989,11 +3511,33 @@ class JosephApp(ctk.CTk):
                 memory=self.memory,
             )
 
+            # Phase X: Continuity and consolidation recording
+            if self._continuity_engine and full_response:
+                try:
+                    self._continuity_engine.record_turn(user_text, full_response)
+                except Exception:
+                    pass
+
+            if getattr(self, '_consolidation_engine', None) and full_response:
+                try:
+                    self._consolidation_engine.consolidate_conversation(
+                        user_messages=[user_text],
+                        assistant_messages=[full_response],
+                        session_id=self.memory.session_id,
+                    )
+                except Exception:
+                    pass
+
             # Run memory agent in background
             if self._memory_agent and full_response:
                 import threading
+                def _safe_process_exchange(ua, fr):
+                    # Skip if user is already sending the next message
+                    if getattr(self, "_llm_busy", None) and self._llm_busy.is_set():
+                        return
+                    self._memory_agent.process_exchange(ua, fr)
                 threading.Thread(
-                    target=self._memory_agent.process_exchange,
+                    target=_safe_process_exchange,
                     args=(user_text, full_response),
                     daemon=True,
                 ).start()
@@ -3001,6 +3545,54 @@ class JosephApp(ctk.CTk):
         except Exception as e:
             logger.error(f"LLM worker error: {e}")
             self._response_queue.put(("error", str(e)))
+        finally:
+            self._llm_busy.clear()
+
+    def _detect_research_intent(self, text: str) -> Optional[str]:
+        """Check if text is a research query. Returns extracted query or None."""
+        match = re.search(
+            r"\b(research|learn about|tell me about|explain what|"
+            r"find information on|look into|look up|"
+            r"give me information on|i want to know about|"
+            r"teach me about|educate me on|"
+            r"background on|find out about|"
+            r"i.d like to know|i want to learn)\b",
+            text, re.IGNORECASE,
+        )
+        if not match:
+            return None
+        query = re.sub(
+            r"^(research|learn about|tell me about|explain what|"
+            r"find information on|look into|give me information on|"
+            r"i want to know about|teach me about|educate me on|"
+            r"background on|find out about|"
+            r"i.d like to know|i want to learn)\s+",
+            "", text.strip(), flags=re.IGNORECASE,
+        ).strip().rstrip(".,!?")
+        if not query or len(query) < 3:
+            return None
+        return query
+
+    def _start_background_research(self, query: str):
+        """Start background research on a topic. Shows progress bar immediately."""
+        if not self._background_research or self._background_research.is_researching():
+            return
+
+        def _show_started():
+            self._research_progress_frame.grid()
+            self._research_progress_label.configure(
+                text=f"  Researching: {query[:60]}",
+                text_color=self.colors.get("accent", "#4d9de0"),
+            )
+            self._research_progress_bar.set(0.05)
+            self._research_progress_bar.configure(progress_color=self.colors.get("accent", "#4d9de0"))
+
+        self.after(0, _show_started)
+
+        self._background_research.research(
+            query,
+            on_progress=self._on_research_progress,
+        )
 
     def _try_automation(self, user_text: str) -> Optional[str]:
         """
@@ -3027,6 +3619,10 @@ class JosephApp(ctk.CTk):
                 from automation.desktop.app_control import AppController
                 self._tool_dispatcher.app_ctrl = AppController()
 
+            # Attach Phase 9 background research to router (for LLM RESEARCH type)
+            if self._background_research:
+                self._router.attach_background_research(self._background_research)
+
             # Attach Phase 5 services to both
             services = dict(
                 weather=self._weather,
@@ -3050,20 +3646,78 @@ class JosephApp(ctk.CTk):
             if hasattr(self, "_google") and self._google:
                 self._tool_dispatcher.google = self._google
 
-            # Try LLM tool dispatcher first
-            response, was_automated = self._tool_dispatcher.dispatch(user_text)
-            if was_automated and response:
-                return response
-
-            # Fall back to regex router for speed on obvious commands
+            # Try regex router first (fast — catches "open", "weather", "search" etc.)
             response, was_automated = self._router.handle_sync(user_text)
             if was_automated and response:
                 return response
+
+            # Try LLM tool dispatcher only for non-chat messages (saves ~2 LLM calls per message)
+            if not (self._planner and self._planner.analyze(user_text) == "chat"):
+                response, was_automated = self._tool_dispatcher.dispatch(user_text)
+                if was_automated and response:
+                    return response
 
         except Exception as e:
             logger.debug(f"Automation check error: {e}")
 
         return None
+
+    def _on_research_progress(self, stage: str, message: str):
+        """
+        Called by background research engine at each stage.
+        Updates progress bar + shows status messages.
+        """
+        stage_progress = {
+            "searching": 0.15,
+            "reading": 0.35,
+            "synthesizing": 0.65,
+            "storing": 0.85,
+            "complete": 1.0,
+            "error": 0.0,
+        }
+        stage_labels = {
+            "searching": "Searching the web",
+            "reading": "Reading sources",
+            "synthesizing": "Synthesizing findings",
+            "storing": "Saving results",
+            "complete": "Done",
+            "error": "Failed",
+        }
+        colors = {
+            "searching": self.colors.get("accent_dim", "#2a5a8a"),
+            "reading": self.colors.get("accent", "#4d9de0"),
+            "synthesizing": self.colors.get("thinking", "#8b5cf6"),
+            "storing": self.colors.get("success", "#3dba7a"),
+            "complete": self.colors.get("success", "#3dba7a"),
+            "error": self.colors.get("error", "#d95f5f"),
+        }
+        progress = stage_progress.get(stage, 0.0)
+        label_text = stage_labels.get(stage, stage.capitalize())
+        color = colors.get(stage, self.colors.get("text_dim", "#7a7a7a"))
+
+        def _update_ui():
+            if stage == "complete":
+                self._add_message_bubble("assistant", message)
+                self._research_progress_frame.grid_remove()
+            elif stage == "error":
+                self._add_system_message(message, color)
+                self._research_progress_frame.grid_remove()
+            else:
+                self._research_progress_frame.grid()
+                short_msg = message.split("...")[0] if "..." in message else message
+                self._research_progress_label.configure(
+                    text=f"  {label_text}: {short_msg}",
+                    text_color=color,
+                )
+                self._research_progress_bar.configure(
+                    progress_color=color,
+                    fg_color=self.colors.get("border", "#333"),
+                )
+                if progress > 0:
+                    self._research_progress_bar.set(progress)
+                self._scroll_to_bottom()
+
+        self.after(0, _update_ui)
 
     def _poll_response_queue(self):
         """
@@ -3159,16 +3813,37 @@ class JosephApp(ctk.CTk):
                 daemon=True,
             ).start()
 
+        # Generate follow-up suggestions
+        if self._followup_engine and self._current_response and not error:
+            try:
+                self._last_followups = self._followup_engine.suggest(
+                    self._last_user_text, self._current_response
+                )
+                suggestions_frame = getattr(
+                    self, "_phase7_suggestions", None
+                )
+                if suggestions_frame and hasattr(suggestions_frame, "refresh"):
+                    suggestions_frame.refresh(
+                        followup_engine=self._followup_engine,
+                        user_input=self._last_user_text,
+                        response_text=self._current_response,
+                    )
+            except Exception:
+                pass
+
         # Re-enable input
         self._is_responding = False
         self._send_btn.configure(state="normal", text="Send  ▶")
-        self._set_status(f"Connected  {settings.OLLAMA_MODEL}", COLORS["success"])
+        self._set_status(f"Connected  {settings.OLLAMA_MODEL}", self.colors["success"])
         self._update_sidebar()
         self._update_turn_panel()
         self._input_box.focus()
 
     def _run_self_correction(self, question, response, messages, system_prompt):
         """Background self-correction check — never blocks UI."""
+        # Skip if user is already sending the next message (frees LLM for chat)
+        if getattr(self, "_llm_busy", None) and self._llm_busy.is_set():
+            return
         try:
             from brain.self_correction import SelfCorrection
             if not hasattr(self, "_self_corrector"):
@@ -3184,6 +3859,9 @@ class JosephApp(ctk.CTk):
 
     def _background_memory_tasks(self):
         """Run memory extraction in background - never blocks UI."""
+        # Skip if user is already sending the next message (frees LLM for chat)
+        if getattr(self, "_llm_busy", None) and self._llm_busy.is_set():
+            return
         try:
             self.memory.maybe_summarize(self.llm)
         except Exception:
@@ -3246,7 +3924,7 @@ class JosephApp(ctk.CTk):
             _set_if_changed(self._mem_facts, "facts", str(status["long_term_facts"]))
 
             sem_text = "Active" if status["semantic_search"] else "Offline"
-            sem_color = COLORS["success"] if status["semantic_search"] else COLORS["error"]
+            sem_color = self.colors["success"] if status["semantic_search"] else self.colors["error"]
             if self._sidebar_cache.get("sem") != sem_text:
                 self._mem_semantic.configure(text=sem_text, text_color=sem_color)
                 self._sidebar_cache["sem"] = sem_text
@@ -3276,7 +3954,7 @@ class JosephApp(ctk.CTk):
     def _cmd_clear(self):
         """Clear conversation history."""
         self.memory.short_term.clear()
-        self._add_system_message("Conversation cleared", COLORS["text_dim"])
+        self._add_system_message("Conversation cleared", self.colors["text_dim"])
         self._update_sidebar()
         self._scroll_to_bottom()
 
@@ -3284,16 +3962,16 @@ class JosephApp(ctk.CTk):
         """Show stored user facts in chat."""
         facts = self.memory.long_term.get_all_facts()
         if not facts:
-            self._add_system_message("No facts stored yet.", COLORS["text_dim"])
+            self._add_system_message("No facts stored yet.", self.colors["text_dim"])
         else:
             lines = "\n".join([f"  {k}: {v}" for k, v in facts.items()])
-            self._add_system_message(f"Known facts:\n{lines}", COLORS["accent"])
+            self._add_system_message(f"Known facts:\n{lines}", self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_memory_status(self):
         """Show memory status in chat."""
         status_text = self.memory.format_status()
-        self._add_system_message(status_text, COLORS["accent"])
+        self._add_system_message(status_text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_reminders(self):
@@ -3302,7 +3980,7 @@ class JosephApp(ctk.CTk):
             text = self._scheduler.format_jobs()
         else:
             text = "Scheduler not ready yet."
-        self._add_system_message(text, COLORS["accent"])
+        self._add_system_message(text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_tasks(self):
@@ -3312,7 +3990,7 @@ class JosephApp(ctk.CTk):
             text = self._notes.format_tasks(tasks)
         else:
             text = "Tasks not ready yet."
-        self._add_system_message(text, COLORS["accent"])
+        self._add_system_message(text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_notes(self):
@@ -3322,7 +4000,7 @@ class JosephApp(ctk.CTk):
             text = self._notes.format_notes(notes)
         else:
             text = "Notes not ready yet."
-        self._add_system_message(text, COLORS["accent"])
+        self._add_system_message(text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _do_search(self) -> None:
@@ -3338,7 +4016,7 @@ class JosephApp(ctk.CTk):
         if not query:
             self._add_system_message(
                 "Usage: /search <query>  or  type 'search my conversations for X'",
-                COLORS["text_dim"],
+                self.colors["text_dim"],
             )
             self._scroll_to_bottom()
             return
@@ -3348,7 +4026,7 @@ class JosephApp(ctk.CTk):
             text = self._conversation_search.format_results(results)
         else:
             text = "Search not available."
-        self._add_system_message(text, COLORS["accent"])
+        self._add_system_message(text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_focus(self, duration: int = 25) -> None:
@@ -3357,14 +4035,14 @@ class JosephApp(ctk.CTk):
             result = self._focus_mode.start(duration_minutes=duration)
             self._add_message_bubble("assistant", result)
         else:
-            self._add_system_message("Focus mode not ready.", COLORS["text_dim"])
+            self._add_system_message("Focus mode not ready.", self.colors["text_dim"])
         self._scroll_to_bottom()
 
     def _cmd_focus_status(self) -> None:
         """Show focus session status."""
         if self._focus_mode:
             text = self._focus_mode.status()
-            self._add_system_message(text, COLORS["accent"])
+            self._add_system_message(text, self.colors["accent"])
         self._scroll_to_bottom()
 
     def _cmd_emails(self) -> None:
@@ -3374,7 +4052,7 @@ class JosephApp(ctk.CTk):
                 text = self._email_triage.get_morning_summary()
             else:
                 text = "Email triage not available. Set up Google integration first."
-            self.after(0, lambda: self._add_system_message(text, COLORS["accent"]))
+            self.after(0, lambda: self._add_system_message(text, self.colors["accent"]))
             self.after(0, self._scroll_to_bottom)
 
         import threading
@@ -3386,7 +4064,7 @@ class JosephApp(ctk.CTk):
             self._add_system_message(
                 "Spotify not configured. Add SPOTIFY_CLIENT_ID and "
                 "SPOTIFY_CLIENT_SECRET to .env",
-                COLORS["text_dim"],
+                self.colors["text_dim"],
             )
             self._scroll_to_bottom()
             return
@@ -3402,7 +4080,7 @@ class JosephApp(ctk.CTk):
         else:
             result = self._spotify.now_playing()
 
-        self._add_system_message(result, COLORS["accent"])
+        self._add_system_message(result, self.colors["accent"])
         self._scroll_to_bottom()
 
     # ------------------------------------------------------------------ #
@@ -3417,13 +4095,20 @@ class JosephApp(ctk.CTk):
             active_hyper.set_session_context(self.memory.session_id)
         self._update_sidebar()
         self._update_turn_panel()
-        self._sess_started.configure(text=datetime.now().strftime("%H:%M"))
+        if hasattr(self, "_sess_started"):
+            self._sess_started.configure(text=datetime.now().strftime("%H:%M"))
 
         # Show greeting on a slight delay so UI renders first
         self.after(400, self._show_greeting)
         self.after(1500, self._init_agents)
         self.after(2000, self._init_phase5)
         self.after(2500, self._refresh_command_center)
+        # Warm-start the LLM model so first user message isn't cold
+        try:
+            import threading
+            threading.Thread(target=self.llm.generate, args=("hi",), kwargs={"max_tokens": 1}, daemon=True).start()
+        except Exception:
+            pass
 
     def _show_greeting(self):
         """Show Joseph's opening greeting."""
@@ -3451,18 +4136,18 @@ class JosephApp(ctk.CTk):
             if started:
                 self._voice_enabled = True
                 self._voice_btn.configure(
-                    text_color=COLORS["success"],
-                    fg_color=COLORS["card"],
+                    text_color=self.colors["success"],
+                    fg_color=self.colors["card"],
                 )
                 self._voice_state_label.configure(
                     text=f"Say '{settings.WAKE_WORD}'...",
-                    text_color=COLORS["text_dim"],
+                    text_color=self.colors["text_dim"],
                 )
                 logger.info("Voice system started from UI")
             else:
                 self._voice_state_label.configure(
                     text="Voice unavailable - text only",
-                    text_color=COLORS["text_dim"],
+                    text_color=self.colors["text_dim"],
                 )
 
         except Exception as e:
@@ -3470,7 +4155,7 @@ class JosephApp(ctk.CTk):
             try:
                 self._voice_state_label.configure(
                     text="Voice unavailable",
-                    text_color=COLORS["text_dim"],
+                    text_color=self.colors["text_dim"],
                 )
             except Exception:
                 pass
@@ -3518,7 +4203,7 @@ class JosephApp(ctk.CTk):
                 if self._voice and self._voice_enabled:
                     self._voice.tts.speak(msg, interrupt=True)
                 self.after(0, lambda: self._add_system_message(
-                    f"Reminder: {msg}", COLORS["warning"]
+                    f"Reminder: {msg}", self.colors["warning"]
                 ))
 
             self._scheduler = SchedulerManager(on_reminder=speak_reminder)
@@ -3557,6 +4242,40 @@ class JosephApp(ctk.CTk):
 
             # Phase 9 — Notifications, Tray, Proactive, Multi-model, Plugins
             self._init_phase9()
+
+            # Phase 8 — Connect project store to workspace engines
+            pm = getattr(self, "_phase5_pmgr", None)
+            if pm and hasattr(pm, "project_store"):
+                self._project_store = pm.project_store
+                if self._workspace_manager:
+                    self._workspace_manager._ps = pm.project_store
+                    self._workspace_manager._gt = pm.goal_tracker
+                    self._workspace_manager._mt = pm.milestone_tracker
+                    self._workspace_manager._tm = pm.task_manager
+                    self._workspace_manager._nm = getattr(self, "_notes", None)
+                if self._project_commander:
+                    self._project_commander._wm = self._workspace_manager
+                # Connect briefing_v2 / weekly_review to project_store
+                for engine in [self._briefing_v2, self._weekly_review]:
+                    if engine:
+                        engine._ps = pm.project_store
+                # Connect project_memory and continuity_engine to project_store
+                if self._project_memory:
+                    self._project_memory._ps = pm.project_store
+                if self._continuity_engine:
+                    self._continuity_engine._ps = pm.project_store
+                # Connect ambient_intel to project_manager
+                if self._ambient_intel:
+                    self._ambient_intel._pm = pm
+                # Connect followup_engine to project_manager
+                if self._followup_engine:
+                    self._followup_engine._pm = pm
+                # Connect Phase 9 engines to research workspace & project store
+                if self._document_intelligence and self._research_workspace:
+                    self._document_intelligence._rw = self._research_workspace
+                if self._paper_analyzer and self._research_workspace:
+                    self._paper_analyzer._rw = self._research_workspace
+                logger.info("Phase 8: Engines connected to project store")
 
             # Start API server in background
             self._start_api_server()
@@ -3639,7 +4358,7 @@ class JosephApp(ctk.CTk):
     def _on_clipboard_suggestion(self, suggestion: str, item) -> None:
         """Called by clipboard monitor with a contextual suggestion."""
         self.after(0, lambda: self._add_system_message(
-            suggestion, COLORS["text_dim"]
+            suggestion, self.colors["text_dim"]
         ))
         self.after(0, self._scroll_to_bottom)
 
@@ -3718,7 +4437,7 @@ class JosephApp(ctk.CTk):
         """Called by proactive engine with a suggestion."""
         # Show in chat
         self.after(0, lambda: self._add_system_message(
-            f"💡 {message}", COLORS["accent"]
+            f"💡 {message}", self.colors["accent"]
         ))
         self.after(0, self._scroll_to_bottom)
         # Speak it
@@ -3760,7 +4479,7 @@ class JosephApp(ctk.CTk):
         """Called by autonomous agent after each step — updates UI."""
         self.after(0, lambda: self._add_system_message(
             f"Step {step} [{action_type}]: {result[:80]}...",
-            COLORS["thinking"],
+            self.colors["thinking"],
         ))
         self.after(0, self._scroll_to_bottom)
         """
@@ -3781,25 +4500,25 @@ class JosephApp(ctk.CTk):
             if started:
                 self._voice_enabled = True
                 self._voice_btn.configure(
-                    text_color=COLORS["success"],
-                    fg_color=COLORS["card"],
+                    text_color=self.colors["success"],
+                    fg_color=self.colors["card"],
                 )
                 self._voice_state_label.configure(
                     text=f"Listening for '{settings.WAKE_WORD}'...",
-                    text_color=COLORS["text_dim"],
+                    text_color=self.colors["text_dim"],
                 )
                 logger.info("Voice system started from UI")
             else:
                 self._voice_state_label.configure(
                     text="Voice unavailable - text only",
-                    text_color=COLORS["text_dim"],
+                    text_color=self.colors["text_dim"],
                 )
 
         except Exception as e:
             logger.warning(f"Voice init failed: {e}")
             self._voice_state_label.configure(
                 text="Voice unavailable",
-                text_color=COLORS["text_dim"],
+                text_color=self.colors["text_dim"],
             )
 
     def _toggle_voice(self) -> None:
@@ -3807,7 +4526,7 @@ class JosephApp(ctk.CTk):
         if not self._voice or not self._voice_enabled:
             self._add_system_message(
                 "Voice system not available. Check microphone.",
-                COLORS["warning"],
+                self.colors["warning"],
             )
             return
 
@@ -3816,19 +4535,19 @@ class JosephApp(ctk.CTk):
         if self._voice.state == VoiceState.IDLE:
             # Trigger push-to-talk
             self._voice_btn.configure(
-                fg_color=COLORS["error"],
+                fg_color=self.colors["error"],
                 text_color="#ffffff",
             )
             self._voice_state_label.configure(
                 text="Listening... speak now",
-                text_color=COLORS["error"],
+                text_color=self.colors["error"],
             )
-            self._set_status("Listening...", COLORS["error"])
+            self._set_status("Listening...", self.colors["error"])
             self._voice.push_to_talk()
         else:
             self._add_system_message(
                 "Already listening or processing...",
-                COLORS["text_dim"],
+                self.colors["text_dim"],
             )
 
     def _handle_voice_text(self, text: str) -> str:
@@ -3941,15 +4660,15 @@ class JosephApp(ctk.CTk):
         from voice.voice_controller import VoiceState
 
         state_display = {
-            VoiceState.IDLE: (f"Say '{settings.WAKE_WORD}'...", COLORS["text_dim"]),
-            VoiceState.WAKE_DETECTED: ("Wake word detected!", COLORS["accent"]),
-            VoiceState.LISTENING: ("Listening...", COLORS["error"]),
-            VoiceState.PROCESSING: ("Processing...", COLORS["warning"]),
-            VoiceState.SPEAKING: ("Speaking...", COLORS["success"]),
-            VoiceState.DISABLED: ("Voice disabled", COLORS["text_dim"]),
+            VoiceState.IDLE: (f"Say '{settings.WAKE_WORD}'...", self.colors["text_dim"]),
+            VoiceState.WAKE_DETECTED: ("Wake word detected!", self.colors["accent"]),
+            VoiceState.LISTENING: ("Listening...", self.colors["error"]),
+            VoiceState.PROCESSING: ("Processing...", self.colors["warning"]),
+            VoiceState.SPEAKING: ("Speaking...", self.colors["success"]),
+            VoiceState.DISABLED: ("Voice disabled", self.colors["text_dim"]),
         }
 
-        text, color = state_display.get(state, ("", COLORS["text_dim"]))
+        text, color = state_display.get(state, ("", self.colors["text_dim"]))
 
         # Update UI on main thread
         self.after(0, lambda: self._voice_state_label.configure(
@@ -3959,8 +4678,8 @@ class JosephApp(ctk.CTk):
         # Reset voice button color when idle
         if state == VoiceState.IDLE:
             self.after(0, lambda: self._voice_btn.configure(
-                fg_color=COLORS["card"],
-                text_color=COLORS["success"],
+                fg_color=self.colors["card"],
+                text_color=self.colors["success"],
             ))
 
     # ------------------------------------------------------------------ #

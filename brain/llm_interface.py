@@ -186,7 +186,7 @@ class LLMInterface:
         options = {
             "temperature": temperature or self.temperature,
             "num_predict": max_tokens or self.max_tokens,
-            "num_ctx": 4096,
+            "num_ctx": 2048,
             "repeat_penalty": 1.1,
         }
 

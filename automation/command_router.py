@@ -102,6 +102,17 @@ QUICK_NOTES_LIST = re.compile(
     re.IGNORECASE,
 )
 
+QUICK_RESEARCH = re.compile(
+    r"\b(research|learn about|tell me about|explain|what is|what are|"
+    r"how does|how do|how to|find information on|look into|"
+    r"give me information on|i want to know about|"
+    r"teach me about|educate me on|"
+    r"background on|more about|"
+    r"find out about|can you research|can you look up|"
+    r"i.d like to know|i want to learn)\b",
+    re.IGNORECASE,
+)
+
 # ------------------------------------------------------------------ #
 # Site map
 # ------------------------------------------------------------------ #
@@ -142,14 +153,17 @@ Respond with ONLY a JSON object, no explanation, no markdown.
 
 JSON format:
 {
-  "type": "BROWSER_OPEN" | "BROWSER_SEARCH" | "YOUTUBE_SEARCH" | "YOUTUBE_PLAY" | "DESKTOP_OPEN" | "SCREENSHOT" | "CLIPBOARD_READ" | "NONE",
+  "type": "BROWSER_OPEN" | "BROWSER_SEARCH" | "RESEARCH" | "YOUTUBE_SEARCH" | "YOUTUBE_PLAY" | "DESKTOP_OPEN" | "SCREENSHOT" | "CLIPBOARD_READ" | "NONE",
   "target": "the website name, search query, app name, or null",
   "url": "full URL if applicable or null"
 }
 
 Examples:
 User: "open YouTube" → {"type": "BROWSER_OPEN", "target": "youtube", "url": "https://youtube.com"}
-User: "search for Python tutorials" → {"type": "BROWSER_SEARCH", "target": "Python tutorials", "url": null}
+User: "search the web for Python tutorials" → {"type": "BROWSER_SEARCH", "target": "Python tutorials", "url": null}
+User: "research quantum computing" → {"type": "RESEARCH", "target": "quantum computing", "url": null}
+User: "tell me about machine learning" → {"type": "RESEARCH", "target": "machine learning", "url": null}
+User: "learn about the Roman Empire" → {"type": "RESEARCH", "target": "the Roman Empire", "url": null}
 User: "play lofi music on YouTube" → {"type": "YOUTUBE_PLAY", "target": "lofi music", "url": null}
 User: "open Notepad" → {"type": "DESKTOP_OPEN", "target": "notepad", "url": null}
 User: "take a screenshot" → {"type": "SCREENSHOT", "target": null, "url": null}
@@ -183,6 +197,13 @@ class CommandRouter:
         self.notes = None
         self.scheduler = None
         self.briefing = None
+
+        # Phase 9: Background research engine
+        self.background_research = None
+
+    def attach_background_research(self, engine):
+        """Attach the background research engine."""
+        self.background_research = engine
 
     def attach_services(self, weather=None, notes=None, scheduler=None, briefing=None):
         """Attach Phase 5 services to the router."""
@@ -325,7 +346,7 @@ class CommandRouter:
                     await self.browser.search_youtube(query)
                     return f"Searching YouTube for '{query}'.", True
 
-        # Google search
+        # Google search (visible browser)
         if QUICK_SEARCH.search(text) and "youtube" not in text.lower():
             query = self._extract_search_query(text)
             if query and len(query) > 2:
@@ -378,6 +399,12 @@ class CommandRouter:
                     site_url = f"https://{target_lower}.com"
                 success = await self.browser.open_url(site_url)
                 return f"Opening {target}.", True
+
+            elif cmd_type == "RESEARCH":
+                if self.background_research and target:
+                    self.background_research.research(target)
+                    return f"Researching '{target}' in the background.", True
+                return f"I'll look into '{target}' for you.", True
 
             elif cmd_type == "BROWSER_SEARCH":
                 await self.browser.search_google(target)
@@ -472,6 +499,22 @@ class CommandRouter:
             return "When should I remind you? Say something like 'remind me at 3pm to call John'."
 
         return "Reminder could not be set."
+
+    def _extract_research_query(self, text: str) -> str:
+        """Extract research query from natural language."""
+        cleaned = re.sub(
+            r"^(research|learn about|tell me about|explain|what is|what are|"
+            r"how does|how do|how to|find information on|look into|"
+            r"give me information on|i want to know about|"
+            r"teach me about|educate me on|"
+            r"background on|more about|"
+            r"find out about|can you research|can you look up|"
+            r"i.d like to know|i want to learn)\s+",
+            "",
+            text.strip(),
+            flags=re.IGNORECASE,
+        )
+        return cleaned.strip().rstrip(".,!?")
 
     def _extract_search_query(self, text: str) -> str:
         """Extract clean search query from text."""

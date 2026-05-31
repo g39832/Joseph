@@ -1,0 +1,2048 @@
+"""
+ui/app.py
+----------
+JOSEPH Desktop UI - Polished production-quality dark interface using customtkinter.
+
+Layout:
+  +--------------------------------------------------+
+  |  JOSEPH                    [status]  [HH:MM:SS]  |  <- Header (52px)
+  +---------------------------+----------------------+
+  |                           |  M E M O R Y        |
+  |   Chat Area               |  ---------------    |
+  |   (scrollable)            |  S E S S I O N      |
+  |                           |  ---------------    |
+  |                           |  Q U I C K  A C T   |
+  +---------------------------+----------------------+
+  |  [mic]  [ Type a message...          ] [ Send ]  |  <- Input (80px)
+  |  Enter to send . Shift+Enter newline . / cmds    |
+  +--------------------------------------------------+
+"""
+
+import logging
+import json
+import os
+import queue
+import asyncio
+import threading
+import time
+import webbrowser
+from datetime import datetime
+from typing import Optional
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog
+from tkinter import ttk
+
+import customtkinter as ctk
+import tkinter as tk
+
+from configs.settings import settings
+from hyper.bootstrap import (
+    enhance_response,
+    finalize_hyper_turn,
+    get_context_enhancement,
+    prepare_hyper_turn,
+    shutdown_hyper,
+)
+
+logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+# Color Palette
+# ------------------------------------------------------------------ #
+COLORS = {
+    "bg":           "#141414",
+    "panel":        "#1e1e1e",
+    "card":         "#252525",
+    "card_user":    "#2c2c2c",
+    "card_hover":   "#2f2f2f",
+    "border":       "#333333",
+    "border_light": "#404040",
+    "accent":       "#4d9de0",
+    "accent_hover": "#3d8dd0",
+    "accent_dim":   "#2a5a8a",
+    "text":         "#ececec",
+    "text_dim":     "#7a7a7a",
+    "text_muted":   "#555555",
+    "text_joseph":  "#4d9de0",
+    "text_user":    "#d0d0d0",
+    "success":      "#3dba7a",
+    "error":        "#d95f5f",
+    "warning":      "#d4924a",
+    "input_bg":     "#1a1a1a",
+    "scrollbar":    "#333333",
+    "thinking":     "#8b5cf6",
+}
+
+FONTS = {
+    "title":     ("Segoe UI", 16, "bold"),
+    "subtitle":  ("Segoe UI", 10),
+    "body":      ("Segoe UI", 13),
+    "body_sm":   ("Segoe UI", 11),
+    "mono":      ("Consolas", 11),
+    "name":      ("Segoe UI Semibold", 11, "bold"),
+    "time":      ("Segoe UI", 9),
+    "sidebar":   ("Segoe UI", 10),
+    "sidebar_h": ("Segoe UI", 9, "bold"),
+    "input":     ("Segoe UI", 13),
+    "btn":       ("Segoe UI Semibold", 12, "bold"),
+}
+
+
+class JosephApp(ctk.CTk):
+    """
+    Main application window for JOSEPH.
+
+    Runs the UI on the main thread.
+    LLM calls run on background threads to keep the UI responsive.
+    Results are passed back via a thread-safe queue.
+    """
+
+    def __init__(self, llm, memory, personality, hyper_engine=None):
+        super().__init__()
+
+        self.llm = llm
+        self.memory = memory
+        self.personality = personality
+        self._hyper = hyper_engine
+
+        # Thread-safe queue for streaming chunks from background thread
+        self._response_queue: queue.Queue = queue.Queue()
+        self._is_responding = False
+        self._current_response = ""
+
+        # Voice controller (initialized after UI is built)
+        self._voice: Optional[object] = None
+        self._voice_enabled = False
+
+        # Automation router (initialized lazily)
+        self._router: Optional[object] = None
+        self._tool_dispatcher: Optional[object] = None
+
+        # Phase 4 agents
+        self._memory_agent: Optional[object] = None
+        self._task_agent: Optional[object] = None
+        self._planner: Optional[object] = None
+
+        # Phase 5 services
+        self._weather = None
+        self._notes = None
+        self._scheduler = None
+        self._briefing = None
+        self._context_awareness = None
+
+        # Phase 7 services
+        self._vision = None
+        self._file_manager = None
+        self._advanced_personality = None
+        self._autonomous_agent = None
+
+        # Phase 8 services
+        self._google = None
+        self._hotkey_daemon = None
+        self._api_server_thread = None
+
+        # Phase 9 services
+        self._notifications = None
+        self._system_tray = None
+        self._proactive_engine = None
+        self._multi_model_router = None
+        self._plugin_system = None
+        self._conversation_search = None
+        self._hyper_turn_packet: dict = {}
+        self._pending_attachments: list[dict] = []
+        self._ui_settings = {
+            "hyper_enabled": bool(hyper_engine),
+            "research_sources": 3,
+            "refresh_interval_ms": 2500,
+            "density": "comfortable",
+            "animations": True,
+            "compact_panels": False,
+        }
+        self._command_center_widgets: dict[str, object] = {}
+        self._command_center_refresh_job = None
+        self._graph_zoom = 1.0
+        self._graph_positions: dict[str, tuple[float, float]] = {}
+        self._selected_memory_id: Optional[int] = None
+        self._selected_graph_node: Optional[str] = None
+        self._selected_improvement = None
+        self._last_turn_summary = {}
+        self._page_frames: dict[str, object] = {}
+        self._nav_buttons: dict[str, object] = {}
+        self._active_page = "Chat"
+        self._layout_state = self._load_layout_state()
+        self._nav_visible = self._layout_state.get("nav_visible", True)
+        self._context_visible = self._layout_state.get("context_visible", True)
+        self._nav_width = int(self._layout_state.get("nav_width", 232))
+        self._context_width = int(self._layout_state.get("context_width", 320))
+        self._theme_mode = self._layout_state.get("theme_mode", "dark")
+        self._layout_density = self._layout_state.get("density", "comfortable")
+        self._font_scale = float(self._layout_state.get("font_scale", 1.0))
+
+        # Phase 10 services
+        self._clipboard_monitor = None
+        self._custom_commands = None
+        self._personality_learning = None
+
+        # Phase 11 services
+        self._spotify = None
+        self._focus_mode = None
+        self._email_triage = None
+
+        # Configure customtkinter
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+        self._ttk_style = ttk.Style()
+        try:
+            self._ttk_style.configure("Responsive.TPanedwindow", background=COLORS["bg"])
+        except Exception:
+            pass
+
+        self._setup_window()
+        self._build_ui()
+        self._start_session()
+
+        # Start polling the response queue
+        self._poll_response_queue()
+
+        # Initialize voice system after UI is ready
+        self.after(1000, self._init_voice)
+
+    # ------------------------------------------------------------------ #
+    # Window Setup
+    # ------------------------------------------------------------------ #
+
+    def _setup_window(self):
+        """Configure the main window."""
+        self.title("JOSEPH - Personal AI Assistant")
+        self.geometry("1360x820")
+        self.minsize(980, 660)
+        self.configure(fg_color=COLORS["bg"])
+
+        # Center on screen
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - 1360) // 2
+        y = (self.winfo_screenheight() - 820) // 2
+        self.geometry(f"1360x820+{x}+{y}")
+
+        # Handle close button
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Hotkeys
+        self.bind("<F2>", lambda e: self._toggle_voice())
+        self.bind("<Escape>", self._on_escape_key)
+
+        # Grid layout: header row + main row + input row
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+    def _layout_state_path(self) -> Path:
+        """Return the persisted UI layout state path."""
+        return settings.DATA_DIR / "ui_layout_state.json"
+
+    def _load_layout_state(self) -> dict:
+        """Load responsive layout state if it exists."""
+        path = self._layout_state_path()
+        try:
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.debug(f"Layout state load skipped: {e}")
+        return {}
+
+    def _save_layout_state(self) -> None:
+        """Persist UI layout preferences."""
+        try:
+            data = {
+                "nav_visible": self._nav_visible,
+                "context_visible": self._context_visible,
+                "nav_width": self._nav_width,
+                "context_width": self._context_width,
+                "theme_mode": self._theme_mode,
+                "density": self._layout_density,
+                "font_scale": self._font_scale,
+                "active_page": self._active_page,
+            }
+            path = self._layout_state_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.debug(f"Layout state save skipped: {e}")
+
+    # ------------------------------------------------------------------ #
+    # UI Construction
+    # ------------------------------------------------------------------ #
+
+    def _build_ui(self):
+        """Build all UI components."""
+        self._build_header()
+        self._build_main_area()
+        self._build_input_bar()
+
+    def _build_header(self):
+        """Top header bar with title, status indicator, and live clock."""
+        header = ctk.CTkFrame(
+            self,
+            height=52,
+            fg_color=COLORS["panel"],
+            corner_radius=0,
+        )
+        header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        header.grid_columnconfigure(1, weight=1)
+        header.grid_propagate(False)
+
+        # Thin accent line at bottom of header
+        accent_line = ctk.CTkFrame(header, height=1, fg_color=COLORS["accent"])
+        accent_line.place(relx=0, rely=1.0, anchor="sw", relwidth=1.0)
+
+        # Left: Logo + name
+        logo_frame = ctk.CTkFrame(header, fg_color="transparent")
+        logo_frame.grid(row=0, column=0, padx=20, pady=0, sticky="w")
+
+        ctk.CTkLabel(
+            logo_frame,
+            text="◈",
+            font=("Segoe UI", 18),
+            text_color=COLORS["accent"],
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkLabel(
+            logo_frame,
+            text="JOSEPH",
+            font=FONTS["title"],
+            text_color=COLORS["text"],
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            logo_frame,
+            text="Personal AI Assistant",
+            font=FONTS["subtitle"],
+            text_color=COLORS["text_dim"],
+        ).pack(side="left", padx=(10, 0))
+
+        self._layout_actions_frame = ctk.CTkFrame(header, fg_color="transparent")
+        self._layout_actions_frame.grid(row=0, column=1, padx=8, pady=0, sticky="e")
+
+        self._nav_toggle_button = ctk.CTkButton(
+            self._layout_actions_frame,
+            text="Hide Nav",
+            width=76,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._toggle_navigation_panel,
+        )
+        self._nav_toggle_button.pack(side="left", padx=(0, 6))
+
+        self._context_toggle_button = ctk.CTkButton(
+            self._layout_actions_frame,
+            text="Hide Ctx",
+            width=76,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._toggle_context_panel,
+        )
+        self._context_toggle_button.pack(side="left", padx=(0, 6))
+
+        self._reset_layout_button = ctk.CTkButton(
+            self._layout_actions_frame,
+            text="Reset",
+            width=58,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._reset_panel_widths,
+        )
+        self._reset_layout_button.pack(side="left")
+
+        # Right: Status indicator + clock
+        self._status_frame = ctk.CTkFrame(header, fg_color="transparent")
+        self._status_frame.grid(row=0, column=2, padx=20, pady=0, sticky="e")
+
+        # Live clock
+        self._clock_label = ctk.CTkLabel(
+            self._status_frame,
+            text=datetime.now().strftime("%H:%M"),
+            font=("Segoe UI", 13, "bold"),
+            text_color=COLORS["text_dim"],
+        )
+        self._clock_label.pack(side="right", padx=(16, 0))
+        self._update_clock()
+
+        # Status label
+        self._status_label = ctk.CTkLabel(
+            self._status_frame,
+            text=f"Connected  {settings.OLLAMA_MODEL}",
+            font=FONTS["body_sm"],
+            text_color=COLORS["text_dim"],
+        )
+        self._status_label.pack(side="right", padx=(0, 6))
+
+        # Pulsing status dot
+        self._status_dot = ctk.CTkLabel(
+            self._status_frame,
+            text="●",
+            font=("Segoe UI", 12),
+            text_color=COLORS["success"],
+        )
+        self._status_dot.pack(side="right", padx=(0, 4))
+        self._dot_bright = True
+        self._pulse_dot()
+
+    def _update_clock(self):
+        """Update the clock label every second."""
+        self._clock_label.configure(text=datetime.now().strftime("%H:%M:%S"))
+        self.after(1000, self._update_clock)
+
+    def _pulse_dot(self):
+        """Animate the status dot between bright and dim when idle."""
+        if not self._is_responding:
+            color = COLORS["success"] if self._dot_bright else "#1e6640"
+            self._status_dot.configure(text_color=color)
+            self._dot_bright = not self._dot_bright
+        self.after(1200, self._pulse_dot)
+
+    def _build_main_area(self):
+        """Main content area with responsive nav, workspace, and context panel."""
+        main = ctk.CTkFrame(self, fg_color="transparent")
+        main.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        main.grid_rowconfigure(0, weight=1)
+        main.grid_columnconfigure(0, weight=1)
+
+        self._main_pane = ttk.Panedwindow(
+            main,
+            orient="horizontal",
+            style="Responsive.TPanedwindow",
+        )
+        self._main_pane.grid(row=0, column=0, sticky="nsew")
+        self._main_pane.bind("<ButtonRelease-1>", lambda _e: self._capture_layout_state())
+
+        self._nav_host = ctk.CTkFrame(main, fg_color=COLORS["panel"], corner_radius=0)
+        self._workspace_host = ctk.CTkFrame(main, fg_color=COLORS["bg"], corner_radius=0)
+        self._context_host = ctk.CTkFrame(main, fg_color=COLORS["panel"], corner_radius=0)
+
+        self._main_pane.add(self._nav_host, weight=0)
+        self._main_pane.add(self._workspace_host, weight=1)
+        self._main_pane.add(self._context_host, weight=0)
+
+        self._build_navigation_panel(self._nav_host)
+        self._build_workspace_panel(self._workspace_host)
+        self._build_context_panel(self._context_host)
+
+        self._apply_layout_state()
+        self._show_page(self._layout_state.get("active_page", "Chat"))
+        self._schedule_command_center_refresh()
+
+    def _build_navigation_panel(self, parent):
+        """Build the collapsible left navigation panel."""
+        parent.grid_rowconfigure(1, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+
+        self._nav_panel = ctk.CTkFrame(parent, fg_color="transparent")
+        self._nav_panel.grid(row=0, column=0, sticky="nsew")
+        self._nav_panel.grid_rowconfigure(1, weight=1)
+        self._nav_panel.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self._nav_panel, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 6))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            header,
+            text="Command Center",
+            font=FONTS["title"],
+            text_color=COLORS["text"],
+        ).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(
+            header,
+            text="Hide",
+            width=56,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._toggle_navigation_panel,
+        ).grid(row=0, column=1, sticky="e")
+
+        self._nav_buttons_frame = ctk.CTkScrollableFrame(
+            parent,
+            fg_color="transparent",
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+            corner_radius=0,
+        )
+        self._nav_buttons_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 8))
+        self._nav_buttons_frame.grid_columnconfigure(0, weight=1)
+
+        self._nav_status_label = ctk.CTkLabel(
+            self._nav_panel,
+            text="Ready",
+            font=FONTS["sidebar"],
+            text_color=COLORS["text_dim"],
+        )
+        self._nav_status_label.grid(row=2, column=0, sticky="w", padx=14, pady=(0, 12))
+
+        self._nav_buttons.clear()
+        for page in [
+            "Chat",
+            "Dashboard",
+            "Knowledge Graph",
+            "Memory",
+            "Agents",
+            "Diagnostics",
+            "Improvements",
+            "Settings",
+        ]:
+            button = ctk.CTkButton(
+                self._nav_buttons_frame,
+                text=page,
+                height=34,
+                font=FONTS["sidebar"],
+                fg_color=COLORS["card"],
+                hover_color=COLORS["border_light"],
+                text_color=COLORS["text"],
+                corner_radius=8,
+                anchor="w",
+                command=lambda p=page: self._show_page(p),
+            )
+            button.pack(fill="x", pady=4)
+            self._nav_buttons[page] = button
+
+    def _build_workspace_panel(self, parent):
+        """Build the central content stack."""
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+
+        self._workspace_stack = ctk.CTkFrame(parent, fg_color=COLORS["bg"], corner_radius=0)
+        self._workspace_stack.grid(row=0, column=0, sticky="nsew")
+        self._workspace_stack.grid_rowconfigure(0, weight=1)
+        self._workspace_stack.grid_columnconfigure(0, weight=1)
+
+        for page in [
+            "Chat",
+            "Dashboard",
+            "Knowledge Graph",
+            "Memory",
+            "Agents",
+            "Diagnostics",
+            "Improvements",
+            "Settings",
+        ]:
+            frame = ctk.CTkFrame(self._workspace_stack, fg_color=COLORS["bg"], corner_radius=0)
+            frame.grid(row=0, column=0, sticky="nsew")
+            frame.grid_rowconfigure(0, weight=1)
+            frame.grid_columnconfigure(0, weight=1)
+            self._page_frames[page] = frame
+
+        self._build_chat_area(self._page_frames["Chat"])
+        self._build_dashboard_tab(self._page_frames["Dashboard"])
+        self._build_graph_tab(self._page_frames["Knowledge Graph"])
+        self._build_memory_tab(self._page_frames["Memory"])
+        self._build_agents_tab(self._page_frames["Agents"])
+        self._build_diagnostics_tab(self._page_frames["Diagnostics"])
+        self._build_improvements_tab(self._page_frames["Improvements"])
+        self._build_settings_tab(self._page_frames["Settings"])
+
+    def _build_context_panel(self, parent):
+        """Build the optional right context panel."""
+        parent.grid_rowconfigure(1, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+
+        self._context_panel = ctk.CTkFrame(parent, fg_color="transparent")
+        self._context_panel.grid(row=0, column=0, sticky="nsew")
+        self._context_panel.grid_rowconfigure(1, weight=1)
+        self._context_panel.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self._context_panel, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 6))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            header,
+            text="Context",
+            font=FONTS["title"],
+            text_color=COLORS["text"],
+        ).grid(row=0, column=0, sticky="w")
+
+        btn_row = ctk.CTkFrame(header, fg_color="transparent")
+        btn_row.grid(row=0, column=1, sticky="e")
+        ctk.CTkButton(
+            btn_row,
+            text="Hide",
+            width=56,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._toggle_context_panel,
+        ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(
+            btn_row,
+            text="Wide",
+            width=56,
+            height=26,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._reset_panel_widths,
+        ).pack(side="left")
+
+        self._context_stack = ctk.CTkScrollableFrame(
+            self._context_panel,
+            fg_color="transparent",
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+            corner_radius=0,
+        )
+        self._context_stack.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4, 8))
+        self._context_stack.grid_columnconfigure(0, weight=1)
+
+        self._context_cards = {}
+        context_specs = [
+            ("Current Turn", "turn"),
+            ("Agent Activity", "agents"),
+            ("Research", "research"),
+            ("Memory", "memory"),
+            ("Diagnostics", "diagnostics"),
+        ]
+        for title, key in context_specs:
+            card = ctk.CTkFrame(
+                self._context_stack,
+                fg_color=COLORS["panel"],
+                corner_radius=12,
+                border_width=1,
+                border_color=COLORS["border"],
+            )
+            card.pack(fill="x", pady=6)
+            ctk.CTkLabel(card, text=title, font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+            box = ctk.CTkTextbox(
+                card,
+                height=120 if key != "turn" else 150,
+                font=FONTS["body_sm"],
+                fg_color=COLORS["input_bg"],
+                text_color=COLORS["text"],
+                border_color=COLORS["border"],
+                border_width=1,
+                corner_radius=8,
+                wrap="word",
+            )
+            box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+            box.insert("end", "Loading...")
+            box.configure(state="disabled")
+            self._context_cards[key] = box
+
+    def _apply_layout_state(self):
+        """Apply saved panel visibility and widths."""
+        try:
+            self._nav_visible = bool(self._layout_state.get("nav_visible", self._nav_visible))
+            self._context_visible = bool(self._layout_state.get("context_visible", self._context_visible))
+            self._nav_width = int(self._layout_state.get("nav_width", self._nav_width))
+            self._context_width = int(self._layout_state.get("context_width", self._context_width))
+            self._theme_mode = self._layout_state.get("theme_mode", self._theme_mode)
+            self._theme_mode = self._normalize_theme_mode(self._theme_mode)
+            ctk.set_appearance_mode(self._theme_mode)
+        except Exception:
+            pass
+
+        if not hasattr(self, "_main_pane"):
+            return
+
+        try:
+            if self._nav_visible:
+                if str(self._nav_host) not in self._main_pane.panes():
+                    self._main_pane.insert(0, self._nav_host, weight=0)
+            else:
+                if str(self._nav_host) in self._main_pane.panes():
+                    self._main_pane.forget(self._nav_host)
+
+            if self._context_visible:
+                if str(self._context_host) not in self._main_pane.panes():
+                    self._main_pane.insert(len(self._main_pane.panes()), self._context_host, weight=0)
+            else:
+                if str(self._context_host) in self._main_pane.panes():
+                    self._main_pane.forget(self._context_host)
+        except Exception:
+            pass
+        self._sync_panel_controls()
+        self.after_idle(self._restore_pane_sizes)
+
+    def _toggle_navigation_panel(self):
+        """Collapse or restore the left navigation panel."""
+        self._nav_visible = not self._nav_visible
+        if self._nav_visible:
+            try:
+                if str(self._nav_host) not in self._main_pane.panes():
+                    self._main_pane.insert(0, self._nav_host, weight=0)
+            except Exception:
+                pass
+        else:
+            try:
+                self._main_pane.forget(self._nav_host)
+            except Exception:
+                pass
+        self._sync_panel_controls()
+        self.after_idle(self._restore_pane_sizes)
+        self._save_layout_state()
+
+    def _toggle_context_panel(self):
+        """Collapse or restore the right context panel."""
+        self._context_visible = not self._context_visible
+        if self._context_visible:
+            try:
+                if str(self._context_host) not in self._main_pane.panes():
+                    self._main_pane.insert(len(self._main_pane.panes()), self._context_host, weight=0)
+            except Exception:
+                pass
+        else:
+            try:
+                self._main_pane.forget(self._context_host)
+            except Exception:
+                pass
+        self._sync_panel_controls()
+        self.after_idle(self._restore_pane_sizes)
+        self._save_layout_state()
+
+    def _reset_panel_widths(self):
+        """Reset panels to a balanced default width."""
+        self._nav_width = 232
+        self._context_width = 320
+        self._save_layout_state()
+        self._apply_layout_state()
+
+    def _capture_layout_state(self):
+        """Persist the current pane sizes after a manual resize."""
+        if not hasattr(self, "_main_pane"):
+            return
+        try:
+            if self._nav_visible and self._nav_host.winfo_ismapped():
+                self._nav_width = max(180, int(self._nav_host.winfo_width()))
+            if self._context_visible and self._context_host.winfo_ismapped():
+                self._context_width = max(260, int(self._context_host.winfo_width()))
+            self._save_layout_state()
+        except Exception:
+            pass
+
+    def _normalize_theme_mode(self, mode: str) -> str:
+        """Map saved appearance modes into CustomTkinter modes."""
+        value = str(mode or "dark").strip().lower()
+        if value in {"auto", "system"}:
+            return "system"
+        if value in {"light", "dark"}:
+            return value
+        return "dark"
+
+    def _sync_panel_controls(self):
+        """Keep header controls aligned with panel visibility."""
+        try:
+            if hasattr(self, "_nav_toggle_button"):
+                self._nav_toggle_button.configure(
+                    text="Show Nav" if not self._nav_visible else "Hide Nav",
+                )
+            if hasattr(self, "_context_toggle_button"):
+                self._context_toggle_button.configure(
+                    text="Show Ctx" if not self._context_visible else "Hide Ctx",
+                )
+        except Exception:
+            pass
+
+    def _restore_pane_sizes(self):
+        """Apply saved sash positions after the layout changes."""
+        if not hasattr(self, "_main_pane"):
+            return
+        try:
+            self.update_idletasks()
+            panes = list(self._main_pane.panes())
+            if len(panes) == 3 and self._nav_visible and self._context_visible:
+                total = max(self._main_pane.winfo_width(), 1)
+                nav = max(180, min(self._nav_width, max(180, total - 520 - 260)))
+                ctx = max(260, min(self._context_width, max(260, total - nav - 320)))
+                self._main_pane.sashpos(0, nav)
+                self._main_pane.sashpos(1, max(nav + 320, total - ctx))
+            elif len(panes) == 2 and self._nav_visible and not self._context_visible:
+                self._main_pane.sashpos(0, max(180, self._nav_width))
+            elif len(panes) == 2 and not self._nav_visible and self._context_visible:
+                total = max(self._main_pane.winfo_width(), 1)
+                self._main_pane.sashpos(0, max(320, total - max(260, self._context_width)))
+        except Exception:
+            pass
+
+    def _show_page(self, page: str):
+        """Raise the selected workspace page."""
+        if page not in self._page_frames:
+            return
+        self._active_page = page
+        frame = self._page_frames[page]
+        frame.tkraise()
+        for name, button in self._nav_buttons.items():
+            try:
+                button.configure(
+                    fg_color=COLORS["accent"] if name == page else COLORS["card"],
+                    text_color="#ffffff" if name == page else COLORS["text"],
+                )
+            except Exception:
+                pass
+        if hasattr(self, "_nav_status_label"):
+            self._nav_status_label.configure(text=f"Viewing {page}")
+        self._refresh_context_panel()
+        self._save_layout_state()
+
+    def _refresh_context_panel(self):
+        """Refresh the right-side context panel."""
+        if not hasattr(self, "_context_cards"):
+            return
+
+        packet = self._hyper_turn_packet or {}
+        trace = packet.get("trace") or {}
+        research_bundle = packet.get("research_bundle") or {}
+        sources = research_bundle.get("sources") or []
+        memory_bundle = packet.get("memory_bundle") or {}
+        perf = {}
+        diagnostics = {}
+        hyper = self._active_hyper_engine()
+        if hyper and getattr(hyper, "_system_monitor", None):
+            try:
+                perf = hyper._system_monitor.get_metrics_snapshot()
+                diagnostics = hyper._system_monitor.get_health_summary()
+            except Exception:
+                pass
+
+        turn_lines = [
+            f"Page: {self._active_page}",
+            f"Hyper: {'on' if packet.get('enabled') else 'off'}",
+            f"Research: {'yes' if packet.get('research') else 'no'}",
+            f"Planning: {'yes' if packet.get('planning') else 'no'}",
+            f"Reasoning: {'yes' if packet.get('reasoning') else 'no'}",
+            f"Memory hits: {len(memory_bundle.get('semantic_results', [])) + len(memory_bundle.get('keyword_results', [])) if isinstance(memory_bundle, dict) else 0}",
+        ]
+        if packet.get("system_context"):
+            turn_lines.extend(["", packet["system_context"][:1200]])
+        self._set_textbox_content(self._context_cards.get("turn"), "\n".join(turn_lines))
+
+        agent_lines = []
+        if trace:
+            active = [name for name, enabled in trace.items() if enabled]
+            agent_lines.append(f"Active agents: {', '.join(active) if active else 'Idle'}")
+        if packet.get("coordinator"):
+            agent_lines.append(f"Coordinator duration: {packet['coordinator'].get('duration_ms', 0)} ms")
+        agent_lines.append(f"Latest response time: {perf.get('response_time_ms', 0)} ms")
+        self._set_textbox_content(self._context_cards.get("agents"), "\n".join(agent_lines))
+
+        research_lines = [
+            f"Sources: {len(sources)}",
+            f"Confidence: {int((research_bundle.get('confidence', 0) or 0) * 100)}%",
+        ]
+        for source in sources[:3]:
+            research_lines.append(f"- {source.get('title') or source.get('url', 'source')}")
+        self._set_textbox_content(self._context_cards.get("research"), "\n".join(research_lines))
+
+        mem_status = self.memory.get_status()
+        memory_lines = [
+            f"Short-term: {mem_status.get('short_term_messages', 0)}/{mem_status.get('short_term_limit', 0)}",
+            f"Long-term memories: {mem_status.get('long_term_memories', 0)}",
+            f"Facts: {mem_status.get('long_term_facts', 0)}",
+            f"Vector store: {mem_status.get('vector_memories', 0)}",
+        ]
+        self._set_textbox_content(self._context_cards.get("memory"), "\n".join(memory_lines))
+
+        diagnostic_lines = [
+            f"CPU: {perf.get('cpu_usage', 0)}%",
+            f"RAM: {perf.get('memory_usage', 0)}%",
+            f"GPU: {perf.get('gpu_usage', 0)}%",
+            f"Latency: {perf.get('api_latency_ms', 0)} ms",
+            f"Warnings: {', '.join(diagnostics.get('warnings') or []) or 'None'}",
+        ]
+        self._set_textbox_content(self._context_cards.get("diagnostics"), "\n".join(diagnostic_lines))
+
+    def _build_chat_area(self, parent):
+        """Scrollable chat message area with search bar."""
+        chat_container = ctk.CTkFrame(
+            parent,
+            fg_color=COLORS["bg"],
+            corner_radius=0,
+        )
+        chat_container.grid(row=0, column=0, sticky="nsew")
+        chat_container.grid_rowconfigure(2, weight=1)
+        chat_container.grid_columnconfigure(0, weight=1)
+
+        # ── Search bar ───────────────────────────────────────
+        search_bar = ctk.CTkFrame(chat_container, fg_color=COLORS["panel"], height=38, corner_radius=0)
+        search_bar.grid(row=0, column=0, sticky="ew")
+        search_bar.grid_propagate(False)
+        search_bar.grid_columnconfigure(0, weight=1)
+
+        search_row = ctk.CTkFrame(search_bar, fg_color="transparent")
+        search_row.pack(fill="x", padx=12, pady=5)
+        search_row.grid_columnconfigure(0, weight=1)
+
+        self._search_box = ctk.CTkEntry(
+            search_row,
+            placeholder_text="🔍  Search conversations...",
+            font=FONTS["body_sm"],
+            height=28,
+            fg_color=COLORS["input_bg"],
+            border_color=COLORS["border"],
+            border_width=1,
+            text_color=COLORS["text"],
+            placeholder_text_color=COLORS["text_muted"],
+            corner_radius=6,
+        )
+        self._search_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._search_box.bind("<Return>", lambda e: self._do_search())
+
+        ctk.CTkButton(
+            search_row,
+            text="Search",
+            font=FONTS["sidebar"],
+            width=60,
+            height=28,
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._do_search,
+        ).grid(row=0, column=1)
+
+        # Bottom border under search bar
+        ctk.CTkFrame(chat_container, height=1, fg_color=COLORS["border"]).grid(
+            row=0, column=0, sticky="ews", pady=(37, 0)
+        )
+
+        # ── Scrollable messages ──────────────────────────────
+        panel = ctk.CTkFrame(
+            chat_container,
+            fg_color=COLORS["panel"],
+            corner_radius=10,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        panel.grid(row=1, column=0, sticky="ew", padx=14, pady=(10, 8))
+        panel.grid_columnconfigure(0, weight=1)
+
+        tool_row = ctk.CTkFrame(panel, fg_color="transparent")
+        tool_row.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
+        tool_row.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            tool_row,
+            text="Command Center",
+            font=FONTS["name"],
+            text_color=COLORS["accent"],
+        ).pack(side="left")
+
+        self._turn_detail_toggle = ctk.CTkButton(
+            tool_row,
+            text="Collapse",
+            width=84,
+            height=24,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._toggle_turn_details,
+        )
+        self._turn_detail_toggle.pack(side="left", padx=(10, 0))
+
+        ctk.CTkButton(
+            tool_row,
+            text="Attach",
+            width=60,
+            height=24,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._attach_files,
+        ).pack(side="right", padx=(6, 0))
+
+        ctk.CTkButton(
+            tool_row,
+            text="Image",
+            width=58,
+            height=24,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._attach_image,
+        ).pack(side="right", padx=(6, 0))
+
+        ctk.CTkButton(
+            tool_row,
+            text="Export",
+            width=60,
+            height=24,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._export_conversation,
+        ).pack(side="right", padx=(6, 0))
+
+        details_row = ctk.CTkFrame(panel, fg_color="transparent")
+        details_row.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
+        for idx in range(4):
+            details_row.grid_columnconfigure(idx, weight=1)
+
+        self._turn_agents_label = self._create_stat_card(details_row, 0, "Agents", "Idle")
+        self._turn_sources_label = self._create_stat_card(details_row, 1, "Sources", "0")
+        self._turn_memories_label = self._create_stat_card(details_row, 2, "Memories", "0")
+        self._turn_reasoning_label = self._create_stat_card(details_row, 3, "Reasoning", "Waiting")
+
+        self._turn_detail_box = ctk.CTkTextbox(
+            panel,
+            height=82,
+            font=FONTS["body_sm"],
+            fg_color=COLORS["input_bg"],
+            text_color=COLORS["text"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=8,
+            wrap="word",
+        )
+        self._turn_detail_box.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
+        self._turn_detail_box.insert("end", "Turn details will appear here after each response.")
+        self._turn_detail_box.configure(state="disabled")
+
+        self._chat_scroll = ctk.CTkScrollableFrame(
+            chat_container,
+            fg_color=COLORS["bg"],
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+            corner_radius=0,
+        )
+        self._chat_scroll.grid(row=2, column=0, sticky="nsew")
+        self._chat_scroll.grid_columnconfigure(0, weight=1)
+
+        self._message_row = 0
+
+    def _build_sidebar(self, parent):
+        """Right sidebar — clean, minimal, functional."""
+        sidebar = ctk.CTkFrame(
+            parent,
+            fg_color=COLORS["panel"],
+            corner_radius=0,
+            width=260,
+        )
+        sidebar.grid(row=0, column=1, sticky="nsew")
+        sidebar.grid_propagate(False)
+        sidebar.grid_columnconfigure(0, weight=1)
+        sidebar.grid_rowconfigure(0, weight=1)
+
+        # Left border
+        ctk.CTkFrame(sidebar, width=1, fg_color=COLORS["border"]).place(
+            x=0, y=0, relheight=1
+        )
+
+        # Scrollable content
+        scroll = ctk.CTkScrollableFrame(
+            sidebar,
+            fg_color="transparent",
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+            corner_radius=0,
+        )
+        scroll.grid(row=0, column=0, sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        c = ctk.CTkFrame(scroll, fg_color="transparent")
+        c.pack(fill="both", expand=True, padx=14, pady=10)
+
+        # ── Status ──────────────────────────────────────────
+        self._add_sidebar_section(c, "STATUS")
+        self._mem_conversation = self._add_sidebar_stat(c, "Messages", "0 / 20")
+        self._mem_memories     = self._add_sidebar_stat(c, "Memories", "0")
+        self._mem_facts        = self._add_sidebar_stat(c, "Facts", "0")
+        self._mem_semantic     = self._add_sidebar_stat(c, "Search", "Active")
+        self._sess_id          = self._add_sidebar_stat(c, "Session", "—")
+        self._sess_model       = self._add_sidebar_stat(c, "Model", settings.OLLAMA_MODEL.split(":")[0])
+        self._sess_started     = self._add_sidebar_stat(c, "Started", datetime.now().strftime("%H:%M"))
+
+        self._add_divider(c)
+
+        # ── Services ─────────────────────────────────────────
+        self._add_sidebar_section(c, "SERVICES")
+        self._svc_weather   = self._add_sidebar_stat(c, "Weather", "—")
+        self._svc_tasks     = self._add_sidebar_stat(c, "Tasks", "—")
+        self._svc_notes     = self._add_sidebar_stat(c, "Notes", "—")
+        self._svc_scheduler = self._add_sidebar_stat(c, "Reminders", "—")
+
+        self._add_divider(c)
+
+        # ── Actions ──────────────────────────────────────────
+        self._add_sidebar_section(c, "ACTIONS")
+
+        btn = dict(
+            font=FONTS["sidebar"],
+            height=28,
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            anchor="w",
+        )
+
+        actions = [
+            ("⌫  Clear Chat",     self._cmd_clear),
+            ("◎  Facts",          self._cmd_show_facts),
+            ("◈  Memory",         self._cmd_memory_status),
+            ("⏰  Reminders",      self._cmd_reminders),
+            ("✓  Tasks",          self._cmd_tasks),
+            ("📝  Notes",          self._cmd_notes),
+        ]
+        for label, cmd in actions:
+            ctk.CTkButton(c, text=label, command=cmd, **btn).pack(fill="x", pady=1)
+
+        self._add_divider(c)
+
+        # ── Version ──────────────────────────────────────────
+        ctk.CTkLabel(
+            c,
+            text="JOSEPH v1.0",
+            font=("Segoe UI", 9),
+            text_color=COLORS["text_muted"],
+        ).pack(anchor="center", pady=(2, 6))
+
+    def _build_input_bar(self):
+        """Bottom input bar with text field, voice button, and send button."""
+        input_bar = ctk.CTkFrame(
+            self,
+            height=80,
+            fg_color=COLORS["panel"],
+            corner_radius=0,
+        )
+        input_bar.grid(row=2, column=0, sticky="ew")
+        input_bar.grid_columnconfigure(0, weight=1)
+        input_bar.grid_propagate(False)
+
+        # Top border line (slightly lighter for subtle gradient feel)
+        border_top = ctk.CTkFrame(input_bar, height=2, fg_color=COLORS["border_light"])
+        border_top.pack(fill="x", side="top")
+
+        # Input row
+        row = ctk.CTkFrame(input_bar, fg_color="transparent")
+        row.pack(fill="x", expand=False, padx=16, pady=(8, 2))
+        row.grid_columnconfigure(1, weight=1)
+
+        # Voice button (circular push-to-talk)
+        self._voice_btn = ctk.CTkButton(
+            row,
+            text="🎤",
+            font=("Segoe UI", 17),
+            width=42,
+            height=42,
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text_dim"],
+            corner_radius=21,
+            command=self._toggle_voice,
+        )
+        self._voice_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        # Text input
+        self._input_box = ctk.CTkEntry(
+            row,
+            placeholder_text=f"Message {settings.JOSEPH_NAME}...",
+            font=FONTS["input"],
+            height=46,
+            fg_color=COLORS["input_bg"],
+            border_color=COLORS["border"],
+            border_width=1,
+            text_color=COLORS["text"],
+            placeholder_text_color=COLORS["text_muted"],
+            corner_radius=12,
+        )
+        self._input_box.grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        self._input_box.bind("<Return>", self._on_enter_key)
+        self._input_box.bind("<Shift-Return>", lambda e: None)
+        self._input_box.focus()
+
+        # Send button
+        self._send_btn = ctk.CTkButton(
+            row,
+            text="Send  ▶",
+            font=FONTS["btn"],
+            width=110,
+            height=46,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            text_color="#ffffff",
+            corner_radius=12,
+            command=self._send_message,
+        )
+        self._send_btn.grid(row=0, column=2)
+
+        # Hint text + voice state label row
+        hint_row = ctk.CTkFrame(input_bar, fg_color="transparent")
+        hint_row.pack(fill="x", padx=20, pady=(0, 4))
+
+        ctk.CTkLabel(
+            hint_row,
+            text="Enter to send  ·  F2 for voice  ·  / for commands",
+            font=("Segoe UI", 9),
+            text_color=COLORS["text_muted"],
+        ).pack(side="left")
+
+        # Voice speed slider
+        speed_frame = ctk.CTkFrame(hint_row, fg_color="transparent")
+        speed_frame.pack(side="right")
+
+        ctk.CTkLabel(
+            speed_frame,
+            text="Speed",
+            font=("Segoe UI", 9),
+            text_color=COLORS["text_muted"],
+        ).pack(side="left", padx=(0, 4))
+
+        self._speed_slider = ctk.CTkSlider(
+            speed_frame,
+            from_=0.6,
+            to=1.6,
+            number_of_steps=10,
+            width=80,
+            height=14,
+            button_color=COLORS["accent"],
+            button_hover_color=COLORS["accent_hover"],
+            progress_color=COLORS["accent_dim"],
+            fg_color=COLORS["border"],
+            command=self._on_speed_change,
+        )
+        self._speed_slider.set(1.0)
+        self._speed_slider.pack(side="left")
+
+        self._voice_state_label = ctk.CTkLabel(
+            hint_row,
+            text="",
+            font=FONTS["body_sm"],
+            text_color=COLORS["text_dim"],
+        )
+        # voice_state_label goes between hint and speed
+        self._voice_state_label.pack(side="left", padx=(12, 0))
+
+    def _active_hyper_engine(self):
+        """Return the active hyper engine if UI runtime toggles allow it."""
+        if not self._ui_settings.get("hyper_enabled", True):
+            return None
+        return self._hyper
+
+    def _create_stat_card(self, parent, column: int, label: str, value: str):
+        """Create a compact metric card for tab dashboards."""
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=COLORS["card"],
+            corner_radius=10,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        card.grid(row=0, column=column, sticky="ew", padx=4)
+        card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            card,
+            text=label,
+            font=FONTS["sidebar_h"],
+            text_color=COLORS["text_dim"],
+        ).pack(anchor="w", padx=10, pady=(8, 0))
+        value_label = ctk.CTkLabel(
+            card,
+            text=value,
+            font=FONTS["body"],
+            text_color=COLORS["text"],
+        )
+        value_label.pack(anchor="w", padx=10, pady=(2, 8))
+        return value_label
+
+    def _set_textbox_content(self, textbox, content: str) -> None:
+        """Replace a textbox's content without exposing editing."""
+        try:
+            textbox.configure(state="normal")
+            textbox.delete("1.0", "end")
+            textbox.insert("end", content or "")
+            textbox.configure(state="disabled")
+        except Exception:
+            pass
+
+    def _toggle_turn_details(self):
+        """Show or hide the chat intelligence panel."""
+        if not hasattr(self, "_turn_detail_box"):
+            return
+        if self._turn_detail_box.winfo_ismapped():
+            self._turn_detail_box.grid_remove()
+            self._turn_detail_toggle.configure(text="Expand")
+        else:
+            self._turn_detail_box.grid()
+            self._turn_detail_toggle.configure(text="Collapse")
+
+    def _attach_files(self):
+        """Attach one or more files to the next message."""
+        paths = filedialog.askopenfilenames(title="Attach files to Joseph")
+        if not paths:
+            return
+        for path in paths:
+            self._pending_attachments.append({"type": "file", "path": path})
+        self._add_system_message(
+            f"Attached {len(paths)} file(s). They will be included with the next message.",
+            COLORS["accent"],
+        )
+
+    def _attach_image(self):
+        """Attach an image to the next message."""
+        path = filedialog.askopenfilename(
+            title="Attach image to Joseph",
+            filetypes=[
+                ("Images", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not path:
+            return
+        self._pending_attachments.append({"type": "image", "path": path})
+        self._add_system_message(
+            "Image attached. It will be analyzed if vision is available.",
+            COLORS["accent"],
+        )
+
+    def _export_conversation(self):
+        """Export the current conversation to markdown and JSON."""
+        try:
+            settings.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            md_path = settings.EXPORTS_DIR / f"conversation_{stamp}.md"
+            json_path = settings.EXPORTS_DIR / f"conversation_{stamp}.json"
+
+            messages = self.memory.get_conversation_history()
+            lines = [
+                f"# {settings.JOSEPH_NAME} Conversation Export",
+                f"- Exported: {datetime.now().isoformat()}",
+                f"- Session: {getattr(self.memory, 'session_id', 'unknown')}",
+                "",
+            ]
+            for msg in messages:
+                role = msg.get("role", "unknown").title()
+                content = msg.get("content", "")
+                lines.append(f"## {role}")
+                lines.append(content)
+                lines.append("")
+
+            md_path.write_text("\n".join(lines), encoding="utf-8")
+            json_path.write_text(json.dumps(messages, indent=2, ensure_ascii=False), encoding="utf-8")
+            self._add_system_message(
+                f"Conversation exported to {md_path.name} and {json_path.name}",
+                COLORS["success"],
+            )
+        except Exception as e:
+            self._add_system_message(f"Export failed: {e}", COLORS["error"])
+
+    def _format_attachment_context(self) -> str:
+        """Build prompt context from pending attachments."""
+        if not self._pending_attachments:
+            return ""
+
+        parts = ["Attached context:"]
+        for item in self._pending_attachments:
+            path = item.get("path", "")
+            kind = item.get("type", "file")
+            name = os.path.basename(path)
+            if kind == "image":
+                image_context = ""
+                try:
+                    if self._vision and hasattr(self._vision, "_analyze_with_vision_model"):
+                        from PIL import Image
+                        image = Image.open(path)
+                        image_context = self._vision._analyze_with_vision_model(
+                            image,
+                            f"Analyze this uploaded image for {settings.JOSEPH_NAME}.",
+                        )
+                    elif self._vision and hasattr(self._vision, "ask_about_screen"):
+                        image_context = f"Image uploaded: {name}"
+                except Exception as e:
+                    image_context = f"Image analysis failed for {name}: {e}"
+                parts.append(f"- Image: {name}")
+                if image_context:
+                    parts.append(image_context[:1200])
+            else:
+                preview = ""
+                try:
+                    if path and os.path.isfile(path):
+                        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                            preview = f.read(3000)
+                except Exception:
+                    preview = ""
+                parts.append(f"- File: {name}")
+                if preview:
+                    parts.append("```")
+                    parts.append(preview[:3000])
+                    parts.append("```")
+        return "\n".join(parts)
+
+    def _consume_pending_attachments(self) -> str:
+        """Return attachment context and clear the queue."""
+        context = self._format_attachment_context()
+        self._pending_attachments.clear()
+        return context
+
+    def _update_turn_panel(self):
+        """Refresh the summary cards and detail box for the latest turn."""
+        packet = self._hyper_turn_packet or {}
+        trace = packet.get("trace") or {}
+        research_bundle = packet.get("research_bundle") or {}
+        sources = research_bundle.get("sources") or []
+        memory_bundle = packet.get("memory_bundle") or {}
+        research_text = packet.get("research") or ""
+        reasoning_text = packet.get("reasoning") or ""
+        planning_text = packet.get("planning") or ""
+        coordinator = packet.get("coordinator") or {}
+
+        agents = [name for name, active in trace.items() if active]
+        self._turn_agents_label.configure(text=", ".join(agents) if agents else "Idle")
+        self._turn_sources_label.configure(text=str(len(sources)))
+        memory_count = 0
+        if isinstance(memory_bundle, dict):
+            memory_count = len(memory_bundle.get("semantic_results", [])) + len(memory_bundle.get("keyword_results", []))
+        self._turn_memories_label.configure(text=str(memory_count))
+        summary_text = reasoning_text or planning_text or coordinator.get("final_response") or "Waiting"
+        self._turn_reasoning_label.configure(text=summary_text[:80] or "Waiting")
+
+        details = [
+            f"Hyper layer: {'enabled' if packet.get('enabled') else 'disabled'}",
+            f"Research: {'yes' if research_text else 'no'}",
+            f"Planning: {'yes' if planning_text else 'no'}",
+            f"Reasoning: {'yes' if reasoning_text else 'no'}",
+            f"Memory context: {'yes' if memory_bundle else 'no'}",
+        ]
+        if sources:
+            details.append("")
+            details.append("Sources:")
+            for src in sources[:5]:
+                title = src.get("title") or src.get("url") or "source"
+                details.append(f"- {title}")
+        if packet.get("memory_context"):
+            details.append("")
+            details.append("Memory context snapshot:")
+            details.append(packet.get("memory_context", "")[:1000])
+        self._set_textbox_content(self._turn_detail_box, "\n".join(details).strip())
+        self._refresh_context_panel()
+
+    def _schedule_command_center_refresh(self):
+        """Refresh the command center at a conservative cadence."""
+        interval = int(self._ui_settings.get("refresh_interval_ms", 2500))
+        if self._command_center_refresh_job:
+            try:
+                self.after_cancel(self._command_center_refresh_job)
+            except Exception:
+                pass
+        self._command_center_refresh_job = self.after(interval, self._refresh_command_center)
+
+    def _refresh_command_center(self):
+        """Refresh all command-center tabs with current runtime data."""
+        try:
+            self._update_turn_panel()
+            self._refresh_context_panel()
+            self._refresh_dashboard_tab()
+            self._refresh_graph_tab()
+            self._refresh_memory_tab()
+            self._refresh_agents_tab()
+            self._refresh_diagnostics_tab()
+            self._refresh_improvements_tab()
+            self._refresh_settings_tab()
+        finally:
+            self._schedule_command_center_refresh()
+
+    def _build_dashboard_tab(self, parent):
+        """Build the main dashboard tab."""
+        tab = ctk.CTkScrollableFrame(
+            parent,
+            fg_color=COLORS["bg"],
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+        )
+        tab.grid(row=0, column=0, sticky="nsew")
+        tab.grid_columnconfigure(0, weight=1)
+        self._dashboard_tab = tab
+        self._dashboard_boxes = {}
+
+        header = ctk.CTkFrame(tab, fg_color="transparent")
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=4, pady=(4, 12))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            header,
+            text="AI Command Center",
+            font=FONTS["title"],
+            text_color=COLORS["text"],
+        ).pack(side="left")
+        ctk.CTkButton(
+            header,
+            text="Open Browser Dashboard",
+            width=170,
+            height=28,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=lambda: webbrowser.open(f"http://{settings.API_HOST}:{settings.API_PORT}/dashboard"),
+        ).pack(side="right")
+
+        cards = [
+            ("AI Status", "system"),
+            ("Intelligence Status", "agents"),
+            ("GPU Information", "gpu"),
+            ("Knowledge System", "knowledge"),
+        ]
+        for row, (title, key) in enumerate(cards, start=1):
+            card = ctk.CTkFrame(
+                tab,
+                fg_color=COLORS["panel"],
+                corner_radius=12,
+                border_width=1,
+                border_color=COLORS["border"],
+            )
+            card.grid(row=row, column=0, sticky="ew", padx=6, pady=6)
+            card.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(
+                card,
+                text=title,
+                font=FONTS["name"],
+                text_color=COLORS["accent"],
+            ).pack(anchor="w", padx=12, pady=(10, 6))
+            box = ctk.CTkTextbox(
+                card,
+                height=140,
+                font=FONTS["body_sm"],
+                fg_color=COLORS["input_bg"],
+                text_color=COLORS["text"],
+                border_color=COLORS["border"],
+                border_width=1,
+                corner_radius=8,
+                wrap="word",
+            )
+            box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+            box.insert("end", "Loading...")
+            box.configure(state="disabled")
+            self._dashboard_boxes[key] = box
+
+        self._refresh_dashboard_tab()
+
+    def _refresh_dashboard_tab(self):
+        """Refresh dashboard cards from live hyper data."""
+        if not hasattr(self, "_dashboard_boxes"):
+            return
+        data = {}
+        hyper = self._active_hyper_engine()
+        if hyper and hasattr(hyper, "get_dashboard_data"):
+            try:
+                data = hyper.get_dashboard_data()
+            except Exception:
+                data = {}
+
+        system = data.get("system") or {}
+        perf = data.get("performance") or {}
+        agents = data.get("agent_activity") or {}
+        memory = data.get("memory") or {}
+        research = data.get("research") or {}
+        gpu = data.get("gpu") or {}
+
+        self._set_textbox_content(
+            self._dashboard_boxes.get("system"),
+            "\n".join(
+                [
+                    f"Hyper Layer: {'Enabled' if system.get('hyper_enabled') else 'Disabled'}",
+                    f"Model: {system.get('model', settings.OLLAMA_MODEL)}",
+                    f"Session: {system.get('session_id', getattr(self.memory, 'session_id', '—'))}",
+                    f"Uptime: {round(float(system.get('uptime_seconds', 0) or 0), 1)} sec",
+                    f"Running: {system.get('running', False)}",
+                    f"Initialized: {system.get('initialized', False)}",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._dashboard_boxes.get("agents"),
+            "\n".join(
+                [
+                    f"Active agents: {', '.join(agents.get('active_agents') or []) or 'None'}",
+                    f"Decision trace count: {len(agents.get('decisions') or [])}",
+                    f"Execution durations: {agents.get('execution_times') or []}",
+                    f"Task queue depth: {len(agents.get('task_queue') or [])}",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._dashboard_boxes.get("gpu"),
+            "\n".join(
+                [
+                    f"Backend: {(gpu or {}).get('backend', 'cpu')}",
+                    f"GPU: {(gpu or {}).get('device_name', 'Unavailable')}",
+                    f"VRAM: {(gpu or {}).get('vram_used_mb', 0)} / {(gpu or {}).get('vram_total_mb', 0)} MB",
+                    f"Load: {(gpu or {}).get('gpu_usage', 0)}%",
+                    f"Temperature: {(gpu or {}).get('temperature_c', 'N/A')}",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._dashboard_boxes.get("knowledge"),
+            "\n".join(
+                [
+                    f"Memory count: {(memory.get('stats') or {}).get('long_term_memories', memory.get('vector_cache_entries', 0))}",
+                    f"Vector entries: {memory.get('vector_cache_entries', 0)}",
+                    f"Graph nodes: {(memory.get('knowledge_graph') or {}).get('nodes', 0)}",
+                    f"Graph edges: {(memory.get('knowledge_graph') or {}).get('edges', 0)}",
+                    f"Recent research sources: {len((research.get('source_rankings') or []))}",
+                ]
+            ),
+        )
+
+    def _build_diagnostics_tab(self, parent):
+        """Build the diagnostics tab."""
+        tab = ctk.CTkScrollableFrame(
+            parent,
+            fg_color=COLORS["bg"],
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+        )
+        tab.grid(row=0, column=0, sticky="nsew")
+        tab.grid_columnconfigure(0, weight=1)
+        self._diagnostics_tab = tab
+        self._diagnostics_boxes = {}
+
+        for row, (title, key) in enumerate([
+            ("Performance Metrics", "performance"),
+            ("AI Metrics", "ai"),
+            ("Error Monitoring", "errors"),
+            ("System Health", "health"),
+        ], start=0):
+            card = ctk.CTkFrame(
+                tab,
+                fg_color=COLORS["panel"],
+                corner_radius=12,
+                border_width=1,
+                border_color=COLORS["border"],
+            )
+            card.grid(row=row, column=0, sticky="ew", padx=6, pady=6)
+            ctk.CTkLabel(
+                card,
+                text=title,
+                font=FONTS["name"],
+                text_color=COLORS["accent"],
+            ).pack(anchor="w", padx=12, pady=(10, 6))
+            box = ctk.CTkTextbox(
+                card,
+                height=138,
+                font=FONTS["body_sm"],
+                fg_color=COLORS["input_bg"],
+                text_color=COLORS["text"],
+                border_color=COLORS["border"],
+                border_width=1,
+                corner_radius=8,
+                wrap="word",
+            )
+            box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+            box.insert("end", "Loading...")
+            box.configure(state="disabled")
+            self._diagnostics_boxes[key] = box
+
+        self._refresh_diagnostics_tab()
+
+    def _refresh_diagnostics_tab(self):
+        """Refresh diagnostics metrics from the hyper layer."""
+        if not hasattr(self, "_diagnostics_boxes"):
+            return
+        hyper = self._active_hyper_engine()
+        data = {}
+        if hyper and hasattr(hyper, "get_dashboard_data"):
+            try:
+                data = hyper.get_dashboard_data()
+            except Exception:
+                data = {}
+
+        perf = data.get("performance") or {}
+        ai = {
+            "tokens": perf.get("tokens_per_second", 0),
+            "response_time_ms": perf.get("response_time_ms", 0),
+            "api_latency_ms": perf.get("api_latency_ms", 0),
+            "tool_failures": perf.get("tool_failures", 0),
+        }
+        errors = []
+        health = {}
+        if hyper and getattr(hyper, "_system_monitor", None):
+            try:
+                diag = hyper._system_monitor.get_diagnostics()
+                health = diag.get("health") or {}
+                errors = diag.get("tool_failures") or []
+            except Exception:
+                pass
+
+        self._set_textbox_content(
+            self._diagnostics_boxes.get("performance"),
+            "\n".join(
+                [
+                    f"CPU Usage: {perf.get('cpu_usage', 0)}%",
+                    f"RAM Usage: {perf.get('memory_usage', 0)}%",
+                    f"GPU Usage: {perf.get('gpu_usage', 0)}%",
+                    f"VRAM Usage: {perf.get('vram_usage', 0)}%",
+                    f"Response Time: {perf.get('response_time_ms', 0)} ms",
+                    f"Tokens / sec: {perf.get('tokens_per_second', 0)}",
+                    f"API Latency: {perf.get('api_latency_ms', 0)} ms",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._diagnostics_boxes.get("ai"),
+            "\n".join(
+                [
+                    f"Tokens generated: {ai['tokens']}",
+                    f"Average response time: {ai['response_time_ms']} ms",
+                    f"Memory retrieval rate: {'enabled' if (data.get('memory') or {}).get('stats') else 'unknown'}",
+                    f"Search frequency: {len((data.get('research') or {}).get('source_rankings') or [])}",
+                    f"Agent participation: {len((data.get('agent_activity') or {}).get('active_agents') or [])}",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._diagnostics_boxes.get("errors"),
+            "\n".join(
+                [
+                    f"Warnings: {', '.join((health.get('warnings') or []) or ['None'])}",
+                    f"Tool failures: {perf.get('tool_failures', 0)}",
+                    f"Recent failures: {len(errors)}",
+                ]
+            ),
+        )
+        self._set_textbox_content(
+            self._diagnostics_boxes.get("health"),
+            json.dumps(data.get("system") or {}, indent=2, ensure_ascii=False),
+        )
+
+    def _build_graph_tab(self, parent):
+        """Build the knowledge graph visualizer."""
+        tab = ctk.CTkFrame(parent, fg_color=COLORS["bg"])
+        tab.grid(row=0, column=0, sticky="nsew")
+        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_columnconfigure(0, weight=3)
+        tab.grid_columnconfigure(1, weight=1)
+        self._graph_tab = tab
+        self._graph_hitboxes = {}
+
+        controls = ctk.CTkFrame(tab, fg_color=COLORS["panel"], corner_radius=0)
+        controls.grid(row=0, column=0, columnspan=2, sticky="ew")
+        controls.grid_columnconfigure(1, weight=1)
+
+        self._graph_search_box = ctk.CTkEntry(
+            controls,
+            placeholder_text="Search graph nodes...",
+            height=28,
+            font=FONTS["body_sm"],
+        )
+        self._graph_search_box.grid(row=0, column=0, padx=12, pady=10, sticky="w")
+        ctk.CTkButton(
+            controls,
+            text="Refresh",
+            width=66,
+            height=28,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._refresh_graph_tab,
+        ).grid(row=0, column=2, padx=(0, 12), pady=10, sticky="e")
+
+        self._graph_zoom_slider = ctk.CTkSlider(
+            controls,
+            from_=0.7,
+            to=1.8,
+            number_of_steps=11,
+            width=160,
+            command=lambda value: self._set_graph_zoom(value),
+        )
+        self._graph_zoom_slider.set(self._graph_zoom)
+        self._graph_zoom_slider.grid(row=0, column=1, padx=12, pady=10, sticky="ew")
+
+        canvas_card = ctk.CTkFrame(
+            tab,
+            fg_color=COLORS["panel"],
+            corner_radius=12,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        canvas_card.grid(row=1, column=0, sticky="nsew", padx=(6, 4), pady=8)
+        canvas_card.grid_rowconfigure(0, weight=1)
+        canvas_card.grid_columnconfigure(0, weight=1)
+        self._graph_canvas = tk.Canvas(
+            canvas_card,
+            highlightthickness=0,
+            bg=COLORS["bg"],
+        )
+        self._graph_canvas.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self._graph_canvas.bind("<Button-1>", self._on_graph_click)
+
+        side = ctk.CTkFrame(
+            tab,
+            fg_color=COLORS["panel"],
+            corner_radius=12,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        side.grid(row=1, column=1, sticky="nsew", padx=(4, 6), pady=8)
+        side.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(side, text="Node Inspection", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+        self._graph_detail_box = ctk.CTkTextbox(
+            side,
+            height=260,
+            font=FONTS["body_sm"],
+            fg_color=COLORS["input_bg"],
+            text_color=COLORS["text"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=8,
+            wrap="word",
+        )
+        self._graph_detail_box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self._set_textbox_content(self._graph_detail_box, "Select a node to inspect it here.")
+        self._refresh_graph_tab()
+
+    def _set_graph_zoom(self, value: float):
+        self._graph_zoom = float(value)
+        self._refresh_graph_tab()
+
+    def _refresh_graph_tab(self):
+        """Redraw the knowledge graph canvas."""
+        if not hasattr(self, "_graph_canvas"):
+            return
+        engine = self._active_hyper_engine()
+        graph_engine = getattr(engine, "_knowledge_graph", None) if engine else None
+        graph = getattr(graph_engine, "graph", None)
+        self._graph_canvas.delete("all")
+        self._graph_hitboxes = {}
+
+        if not graph or graph.number_of_nodes() == 0:
+            self._graph_canvas.create_text(
+                300, 220,
+                text="No knowledge graph data yet.",
+                fill=COLORS["text_dim"],
+                font=("Segoe UI", 14, "bold"),
+            )
+            self._set_textbox_content(self._graph_detail_box, "No graph data available.")
+            return
+
+        search = self._graph_search_box.get().strip().lower() if hasattr(self, "_graph_search_box") else ""
+        nodes = []
+        for node_id, data in graph.nodes(data=True):
+            label = str(data.get("label", node_id))
+            if search and search not in label.lower() and search not in node_id.lower():
+                continue
+            nodes.append((node_id, data))
+        if not nodes:
+            nodes = list(graph.nodes(data=True))[:25]
+        sub_nodes = [node_id for node_id, _ in nodes]
+        subgraph = graph.subgraph(sub_nodes).copy()
+        try:
+            import networkx as nx  # local import for optional layout
+            self._graph_positions = nx.spring_layout(subgraph, seed=42)
+        except Exception:
+            self._graph_positions = {node_id: (idx / max(1, len(sub_nodes)), 0.5) for idx, node_id in enumerate(sub_nodes)}
+
+        width = max(640, int(self._graph_canvas.winfo_width() or 640))
+        height = max(420, int(self._graph_canvas.winfo_height() or 420))
+        scale = 0.38 * self._graph_zoom
+        center_x = width / 2
+        center_y = height / 2
+        positions = {}
+        for node_id, (x, y) in self._graph_positions.items():
+            positions[node_id] = (
+                center_x + x * width * scale,
+                center_y + y * height * scale,
+            )
+
+        for source, target, data in subgraph.edges(data=True):
+            if source not in positions or target not in positions:
+                continue
+            x1, y1 = positions[source]
+            x2, y2 = positions[target]
+            self._graph_canvas.create_line(x1, y1, x2, y2, fill=COLORS["accent_dim"], width=2)
+            mid_x = (x1 + x2) / 2
+            mid_y = (y1 + y2) / 2
+            relation = str(data.get("relation", "related"))
+            self._graph_canvas.create_text(mid_x, mid_y, text=relation, fill=COLORS["text_dim"], font=("Segoe UI", 8))
+
+        for node_id, data in subgraph.nodes(data=True):
+            x, y = positions.get(node_id, (center_x, center_y))
+            label = str(data.get("label", node_id))
+            importance = float(data.get("importance", 0.5))
+            radius = 18 + importance * 8
+            fill = COLORS["accent"] if node_id == self._selected_graph_node else COLORS["card"]
+            item = self._graph_canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill=fill, outline=COLORS["border_light"], width=1.5)
+            text_item = self._graph_canvas.create_text(x, y, text=label[:18], fill=COLORS["text"], font=("Segoe UI", 9, "bold"))
+            self._graph_hitboxes[item] = node_id
+            self._graph_hitboxes[text_item] = node_id
+
+        details = self._graph_selected_node_details(graph)
+        self._set_textbox_content(self._graph_detail_box, details)
+
+    def _graph_selected_node_details(self, graph) -> str:
+        """Build a readable details block for the selected graph node."""
+        selected = self._selected_graph_node
+        if not selected or selected not in graph:
+            return "Click a node to inspect relationships."
+        data = graph.nodes[selected]
+        lines = [
+            f"Node: {data.get('label', selected)}",
+            f"Type: {data.get('node_type', 'topic')}",
+            f"Importance: {data.get('importance', 0.5)}",
+            f"Properties: {json.dumps(data.get('properties') or {}, ensure_ascii=False)}",
+            "",
+            "Related nodes:",
+        ]
+        for neighbor in list(graph.successors(selected))[:6]:
+            nd = graph.nodes[neighbor]
+            lines.append(f"- {nd.get('label', neighbor)}")
+        return "\n".join(lines)
+
+    def _on_graph_click(self, event):
+        """Select the clicked graph node."""
+        if not getattr(self, "_graph_hitboxes", None):
+            return
+        closest = self._graph_canvas.find_closest(event.x, event.y)
+        if not closest:
+            return
+        item_id = closest[0]
+        node_id = self._graph_hitboxes.get(item_id)
+        if node_id:
+            self._selected_graph_node = node_id
+            self._refresh_graph_tab()
+
+    def _build_memory_tab(self, parent):
+        """Build the memory explorer tab."""
+        tab = ctk.CTkFrame(parent, fg_color=COLORS["bg"])
+        tab.grid(row=0, column=0, sticky="nsew")
+        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_columnconfigure(1, weight=1)
+        self._memory_tab = tab
+        self._memory_memory_rows = []
+
+        top = ctk.CTkFrame(tab, fg_color=COLORS["panel"], corner_radius=0)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top.grid_columnconfigure(0, weight=1)
+        self._memory_search_box = ctk.CTkEntry(top, placeholder_text="Search memories...", height=28, font=FONTS["body_sm"])
+        self._memory_search_box.grid(row=0, column=0, padx=12, pady=10, sticky="ew")
+        ctk.CTkButton(
+            top,
+            text="Search",
+            width=60,
+            height=28,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._refresh_memory_tab,
+        ).grid(row=0, column=1, padx=(0, 6), pady=10)
+        ctk.CTkButton(
+            top,
+            text="Refresh",
+            width=66,
+            height=28,
+            font=FONTS["sidebar"],
+            fg_color=COLORS["card"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text"],
+            corner_radius=5,
+            command=self._refresh_memory_tab,
+        ).grid(row=0, column=2, padx=(0, 12), pady=10)
+
+        left = ctk.CTkScrollableFrame(
+            tab,
+            fg_color=COLORS["panel"],
+            scrollbar_button_color=COLORS["scrollbar"],
+            scrollbar_button_hover_color=COLORS["border_light"],
+            corner_radius=12,
+        )
+        left.grid(row=1, column=0, sticky="nsew", padx=(6, 4), pady=8)
+        left.grid_columnconfigure(0, weight=1)
+        self._memory_list_frame = left
+
+        right = ctk.CTkFrame(
+            tab,
+            fg_color=COLORS["panel"],
+            corner_radius=12,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        right.grid(row=1, column=1, sticky="nsew", padx=(4, 6), pady=8)
+        right.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(right, text="Memory Detail", font=FONTS["name"], text_color=COLORS["accent"]).pack(anchor="w", padx=12, pady=(10, 6))
+        self._memory_detail_box = ctk.CTkTextbox(
+            right,
+            height=260,
+            font=FONTS["body_sm"],
+            fg_color=COLORS["input_bg"],
+            text_color=COLORS["text"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=8,
+            wrap="word",
+        )
+        self._memory_detail_box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        btn_row = ctk.CTkFrame(right, fg_color="transparent")
+        btn_row.pack(fill="x", padx=12, pady=(0, 12))
+        for label, cmd in [
+            ("Pin", self._pin_selected_memory),
+            ("Archive", self._archive_selected_memory),
+            ("Edit", self._edit_selected_memory),
+            ("Delete", self._delete_selected_memory),
+        ]:
+            ctk.CTkButton(
+                btn_row,
+                text=label,
+                width=72,
+                height=28,
+                font=FONTS["sidebar"],
+                fg_color=COLORS["card"],
+                hover_color=COLORS["border_light"],
+                text_color=COLORS["text"],
+                corner_radius=5,
+                command=cmd,
+            ).pack(side="left", padx=(0, 6))
+        self._set_textbox_content(self._memory_detail_box, "Select a memory to inspect or edit it.")
+        self._refresh_memory_tab()
+
+    def _refresh_memory_tab(self):
+        """Refresh the memory explorer list and detail pane."""
+        if not hasattr(self, "_memory_list_frame"):
+            return
+        query = self._memory_search_box.get().strip() if hasattr(self, "_memory_search_box") else ""
+        for widget in self._memory_list_frame.winfo_children():
+            widget.destroy()
+
+        memories = []
+        if query:
+            result = self.memory.search(query)
+            memories.extend(result.get("keyword_results") or [])
+            memories.extend(result.get("semantic_results") or [])
+        else:
+            memories.extend(self.memory.get_recent_memories(limit=30))
+
+        seen = set()
+        normalized = []
+        for item in memories:
+            meta_id = (item.get("metadata") or {}).get("memory_id")
+            key = str(item.get("id") or meta_id or item.get("memory_id") or hash(item.get("content", "")))
+            if key in seen:
+                cont

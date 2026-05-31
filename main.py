@@ -44,6 +44,43 @@ from hyper.bootstrap import (
     prepare_hyper_turn,
     shutdown_hyper,
 )
+from brain.orchestrator import create_router
+
+# Phase 7: advanced capability engines
+from brain.activity_tracker import ActivityTracker
+from brain.project_awareness import ProjectAwareness
+from brain.insight_engine import InsightEngine
+from brain.research_workspace import ResearchWorkspace
+from brain.followup_engine import FollowUpEngine
+from brain.ambient_intelligence import AmbientIntelligence
+
+# Phase 8: Personal Operating System
+from brain.workspace_manager import WorkspaceManager
+from brain.project_commander import ProjectCommander
+from brain.roadmap_engine import RoadmapEngine
+from brain.weekly_review import WeeklyReview
+from brain.briefing_v2 import BriefingV2
+from brain.project_memory import ProjectMemory
+from brain.research_pipeline import ResearchPipeline
+from brain.learning_companion import LearningCompanion
+from brain.decision_history import DecisionHistory
+from brain.continuity_engine import ContinuityEngine
+from brain.memory_consolidation import MemoryConsolidationEngine
+
+# Phase X: Cognitive Architecture
+from brain.cognitive_router import CognitiveRouter, CognitivePath, quality_check
+from brain.memory_relevance import MemoryRelevanceEngine
+from brain.smart_cache import SmartCache
+
+# Phase 9: Vision, Document Intelligence, Computer Awareness
+from brain.document_intelligence import DocumentIntelligence
+from brain.vision_engine import VisionEngine
+from brain.paper_analyzer import PaperAnalyzer
+from brain.screen_awareness import ScreenAwareness
+from brain.code_vision import CodeVision
+from brain.diagram_analyzer import DiagramAnalyzer
+from brain.multimodal_memory import MultimodalMemory
+from brain.background_research import BackgroundResearch
 
 
 def run_gui(
@@ -51,6 +88,35 @@ def run_gui(
     memory: MemoryManager,
     personality: PersonalityEngine,
     hyper_engine=None,
+    router=None,
+    activity_tracker=None,
+    project_awareness=None,
+    insight_engine=None,
+    research_workspace=None,
+    followup_engine=None,
+    ambient_intel=None,
+    workspace_manager=None,
+    project_commander=None,
+    roadmap_engine=None,
+    weekly_review=None,
+    briefing_v2=None,
+    project_memory=None,
+    research_pipeline=None,
+    learning_companion=None,
+    decision_history=None,
+    continuity_engine=None,
+    consolidation_engine=None,
+    document_intelligence=None,
+    vision_engine=None,
+    paper_analyzer=None,
+    screen_awareness=None,
+    code_vision=None,
+    diagram_analyzer=None,
+    multimodal_memory=None,
+    background_research=None,
+    cognitive_router=None,
+    memory_relevance=None,
+    smart_cache=None,
 ):
     """Launch the desktop GUI."""
     try:
@@ -60,32 +126,69 @@ def run_gui(
             memory=memory,
             personality=personality,
             hyper_engine=hyper_engine,
+            router=router,
+            activity_tracker=activity_tracker,
+            project_awareness=project_awareness,
+            insight_engine=insight_engine,
+            research_workspace=research_workspace,
+            followup_engine=followup_engine,
+            ambient_intel=ambient_intel,
+            workspace_manager=workspace_manager,
+            project_commander=project_commander,
+            roadmap_engine=roadmap_engine,
+            weekly_review=weekly_review,
+            briefing_v2=briefing_v2,
+            project_memory=project_memory,
+            research_pipeline=research_pipeline,
+            learning_companion=learning_companion,
+            decision_history=decision_history,
+            continuity_engine=continuity_engine,
+            consolidation_engine=consolidation_engine,
+            document_intelligence=document_intelligence,
+            vision_engine=vision_engine,
+            paper_analyzer=paper_analyzer,
+            screen_awareness=screen_awareness,
+            code_vision=code_vision,
+            diagram_analyzer=diagram_analyzer,
+            multimodal_memory=multimodal_memory,
         )
         app.mainloop()
     except ImportError as e:
         logger.error(f"GUI failed to import: {e}")
         print(f"\nGUI unavailable: {e}")
         print("Falling back to CLI. Run with --cli to skip this message.\n")
-        run_cli(llm, memory, personality, hyper_engine=hyper_engine)
+        run_cli(
+            llm, memory, personality,
+            hyper_engine=hyper_engine,
+            continuity_engine=continuity_engine,
+            consolidation_engine=consolidation_engine,
+        )
 
 def run_cli(
     llm: LLMInterface,
     memory: MemoryManager,
     personality: PersonalityEngine,
     hyper_engine=None,
+    continuity_engine=None,
+    consolidation_engine=None,
+    cognitive_router=None,
+    memory_relevance=None,
+    smart_cache=None,
 ):
-    """Launch the terminal CLI interface."""
+    """Launch the terminal CLI interface with cognitive routing."""
     from ui.cli_interface import CLIInterface
 
     cli = CLIInterface()
     memory.start_session()
+    if continuity_engine:
+        continuity_engine.record_session_start()
     if hyper_engine and hasattr(hyper_engine, "set_session_context"):
         hyper_engine.set_session_context(memory.session_id)
 
     cli.show_welcome(memory_status=memory.format_status())
     cli.show_joseph_response(personality.get_greeting())
 
-    logger.info("CLI chat loop started")
+    logger.info("CLI chat loop started (Phase X cognitive routing)")
 
     while True:
         try:
@@ -124,10 +227,45 @@ def run_cli(
                 continue
 
             memory.add_user_message(user_input)
-            memory_context = memory.get_context_for_llm(query=user_input)
+            request_start = time.perf_counter()
+
+            decision = cognitive_router.classify(user_input, llm_interface=llm) if cognitive_router else None
+            depth = decision.response_depth if decision else 0.5
+            path = decision.path if decision else CognitivePath.FAST
+
+            # Phase X: Build memory context with relevance engine + smart cache
+            _cache_key = f"memctx:{user_input[:50]}"
+            if smart_cache:
+                memory_context = smart_cache.get_memory(_cache_key)
+            if not memory_context:
+                memory_context = memory.get_context_for_llm(query=user_input)
+                if memory_relevance and depth >= 0.4:
+                    try:
+                        raw_search = memory.search(user_input)
+                        semantic = raw_search.get("semantic_results") or []
+                        if len(semantic) > 2:
+                            ranked = memory_relevance.rank_memories(
+                                query=user_input,
+                                semantic_results=semantic,
+                                active_project=getattr(memory, '_active_project', None),
+                            )
+                            selected = memory_relevance.select_top(
+                                ranked,
+                                max_items=3 if depth < 0.5 else 5,
+                                max_estimate_chars=int(depth * 2000),
+                            )
+                            ranked_text = memory_relevance.format_for_prompt(selected)
+                            if ranked_text:
+                                memory_context = f"{memory_context}\n\n## Ranked Memories\n{ranked_text}"
+                    except Exception:
+                        pass
+                if smart_cache:
+                    smart_cache.set_memory(_cache_key, memory_context, ttl=120)
+
             extra_context = get_context_enhancement(hyper_engine, user_input)
             if extra_context:
                 memory_context = f"{memory_context}\n\n{extra_context}" if memory_context else extra_context
+
             hyper_packet = prepare_hyper_turn(hyper_engine, user_input, memory=memory)
             if hyper_packet.get("system_context"):
                 memory_context = (
@@ -135,6 +273,13 @@ def run_cli(
                     if memory_context
                     else hyper_packet["system_context"]
                 )
+
+            depth_instruction = cognitive_router.get_depth_instruction(decision) if cognitive_router else ""
+            path_instruction = cognitive_router.get_path_instruction(decision) if cognitive_router else ""
+            if depth_instruction or path_instruction:
+                instr = "\n".join(filter(None, [depth_instruction, path_instruction]))
+                memory_context = f"{memory_context}\n\n{instr}" if memory_context else instr
+
             system_prompt = get_system_prompt(
                 user_name=settings.USER_NAME,
                 memory_context=memory_context,
@@ -143,7 +288,6 @@ def run_cli(
 
             cli.start_joseph_response()
             full_response = ""
-            response_started = time.perf_counter()
 
             try:
                 for chunk in llm.chat_stream(messages=messages, system_prompt=system_prompt):
@@ -158,12 +302,21 @@ def run_cli(
             cli.end_joseph_response()
             final_response = personality.format_response(full_response)
             final_response = enhance_response(hyper_engine, user_input, final_response, context={"mode": "cli"})
+
+            final_response = quality_check(final_response, user_input)
+
             memory.add_assistant_message(final_response)
+            latency_ms = (time.perf_counter() - request_start) * 1000
+
+            if decision is not None:
+                decision.latency.total_ms = latency_ms
+                decision.latency.llm_ms = latency_ms * 0.7
+
             finalize_hyper_turn(
                 hyper_engine,
                 user_input,
                 final_response,
-                elapsed_seconds=time.perf_counter() - response_started,
+                elapsed_seconds=latency_ms / 1000,
                 memory=memory,
             )
 
@@ -173,16 +326,45 @@ def run_cli(
             except Exception:
                 pass
 
+            if continuity_engine:
+                try:
+                    continuity_engine.record_turn(user_input, final_response)
+                except Exception:
+                    pass
+
+            if consolidation_engine:
+                try:
+                    consolidation_engine.consolidate_conversation(
+                        user_messages=[user_input],
+                        assistant_messages=[final_response],
+                        session_id=memory.session_id,
+                    )
+                except Exception:
+                    pass
+
         except KeyboardInterrupt:
             print()
             cli.show_system_message("Use /quit to exit.")
         except Exception as e:
             logger.exception(f"CLI loop error: {e}")
 
+    if continuity_engine:
+        continuity_engine.record_session_end()
     try:
         memory.end_session()
     except Exception:
         pass
+
+    if consolidation_engine and memory.short_term.total_added >= 2:
+        try:
+            summary = memory.short_term.get_conversation_text()[:500]
+            consolidation_engine.consolidate_session_end(
+                session_id=memory.session_id,
+                summary=summary,
+                message_count=memory.short_term.total_added,
+            )
+        except Exception:
+            pass
 
     shutdown_hyper(hyper_engine)
 
@@ -206,6 +388,95 @@ def main():
     memory = MemoryManager()
     personality = PersonalityEngine()
     hyper_engine = create_hyper_engine(llm=llm, memory=memory, personality=personality)
+
+    # Phase X: Cognitive Architecture (initialized early so all subsystems can use it)
+    cognitive_router = CognitiveRouter()
+    memory_relevance = MemoryRelevanceEngine()
+    smart_cache = SmartCache()
+    logger.info("Phase X: Cognitive architecture initialized")
+
+    # Phase 6: assistant router (orchestration layer)
+    router = create_router(llm=llm, memory=memory, hyper_engine=hyper_engine,
+                          memory_relevance=memory_relevance, smart_cache=smart_cache)
+    logger.info("Phase 6: AssistantRouter created")
+
+    # Phase 7: advanced capability engines
+    activity_tracker = ActivityTracker()
+    insight_engine = InsightEngine(activity_tracker=activity_tracker)
+    research_workspace = ResearchWorkspace()
+    followup_engine = FollowUpEngine(
+        research_workspace=research_workspace,
+    )
+    ambient_intel = AmbientIntelligence(
+        activity_tracker=activity_tracker,
+    )
+    project_awareness = ProjectAwareness()
+    logger.info("Phase 7: Capability engines initialized")
+
+    # Phase 8: Personal Operating System
+    decision_history = DecisionHistory()
+    workspace_manager = WorkspaceManager(
+        research_workspace=research_workspace,
+    )
+    project_commander = ProjectCommander(
+        workspace_manager=workspace_manager,
+    )
+    roadmap_engine = RoadmapEngine(
+        workspace_manager=workspace_manager,
+    )
+    weekly_review = WeeklyReview(
+        workspace_manager=workspace_manager,
+        project_commander=project_commander,
+        activity_tracker=activity_tracker,
+        insight_engine=insight_engine,
+        research_workspace=research_workspace,
+    )
+    briefing_v2 = BriefingV2(
+        workspace_manager=workspace_manager,
+        project_commander=project_commander,
+        weekly_review=weekly_review,
+        activity_tracker=activity_tracker,
+        insight_engine=insight_engine,
+        research_workspace=research_workspace,
+    )
+    project_memory = ProjectMemory(
+        memory_manager=memory,
+        workspace_manager=workspace_manager,
+        project_store=None,
+    )
+    research_pipeline = ResearchPipeline(
+        research_workspace=research_workspace,
+    )
+    learning_companion = LearningCompanion(
+        roadmap_engine=roadmap_engine,
+        workspace_manager=workspace_manager,
+    )
+    continuity_engine = ContinuityEngine(
+        workspace_manager=workspace_manager,
+        project_commander=project_commander,
+        activity_tracker=activity_tracker,
+        decision_history=decision_history,
+    )
+    consolidation_engine = MemoryConsolidationEngine()
+    logger.info(f"Memory consolidation loaded: {consolidation_engine.memory_count} memories")
+
+    # Phase 9: Vision, Document Intelligence, Computer Awareness
+    document_intelligence = DocumentIntelligence()
+    vision_engine = VisionEngine()
+    paper_analyzer = PaperAnalyzer(
+        document_intelligence=document_intelligence,
+        research_workspace=research_workspace,
+    )
+    screen_awareness = ScreenAwareness()
+    code_vision = CodeVision(vision_engine=vision_engine)
+    diagram_analyzer = DiagramAnalyzer(vision_engine=vision_engine)
+    multimodal_memory = MultimodalMemory()
+    background_research = BackgroundResearch(
+        llm=llm,
+        research_workspace=research_workspace,
+        research_pipeline=research_pipeline,
+    )
+    logger.info("Phase 9: Vision/Document engines initialized")
 
     # Health check
     if use_cli:
@@ -242,9 +513,49 @@ def main():
 
     # Launch
     if use_cli:
-        run_cli(llm, memory, personality, hyper_engine=hyper_engine)
+        run_cli(
+            llm, memory, personality,
+            hyper_engine=hyper_engine,
+            continuity_engine=continuity_engine,
+            consolidation_engine=consolidation_engine,
+            cognitive_router=cognitive_router,
+            memory_relevance=memory_relevance,
+            smart_cache=smart_cache,
+        )
     else:
-        run_gui(llm, memory, personality, hyper_engine=hyper_engine)
+        run_gui(
+            llm, memory, personality,
+            hyper_engine=hyper_engine,
+            router=router,
+            activity_tracker=activity_tracker,
+            project_awareness=project_awareness,
+            insight_engine=insight_engine,
+            research_workspace=research_workspace,
+            followup_engine=followup_engine,
+            ambient_intel=ambient_intel,
+            workspace_manager=workspace_manager,
+            project_commander=project_commander,
+            roadmap_engine=roadmap_engine,
+            weekly_review=weekly_review,
+            briefing_v2=briefing_v2,
+            project_memory=project_memory,
+            research_pipeline=research_pipeline,
+            learning_companion=learning_companion,
+            decision_history=decision_history,
+            continuity_engine=continuity_engine,
+            consolidation_engine=consolidation_engine,
+            document_intelligence=document_intelligence,
+            vision_engine=vision_engine,
+            paper_analyzer=paper_analyzer,
+            screen_awareness=screen_awareness,
+            code_vision=code_vision,
+            diagram_analyzer=diagram_analyzer,
+            multimodal_memory=multimodal_memory,
+            background_research=background_research,
+            cognitive_router=cognitive_router,
+            memory_relevance=memory_relevance,
+            smart_cache=smart_cache,
+        )
 
     shutdown_hyper(hyper_engine)
     logger.info(f"{settings.JOSEPH_NAME} shutdown complete.")

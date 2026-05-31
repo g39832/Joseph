@@ -1,0 +1,14 @@
+digraph Dependencies {
+    node [shape=box, style=rounded, fontname=Arial];
+    rankdir=LR;
+
+    n0 [label="architecture_mapper"];
+    n1 [label="bug_detector"];
+    n2 [label="codebase_analyzer"];
+    n3 [label="dependency_analyzer"];
+    n4 [label="doc_generator"];
+    n5 [label="engineering_assistant"];
+    n6 [label="project_summarizer"];
+    n7 [label="refactoring_suggester"];
+    n8 [label="__init__"];
+}
